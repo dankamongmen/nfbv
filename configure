@@ -19,6 +19,7 @@ unset libs
 unset ungif
 unset jpeg
 unset png
+unset bmp
 unset dfb
 
 help(){
@@ -42,6 +43,7 @@ Features and packages:
   --without-libungif	disable libungif support even if found
   --without-libjpeg	disable libjpeg support even if found
   --without-libpng	disable libpng support even if found
+  --without-bmp		disable bmp support
 EOF
 }
 
@@ -50,7 +52,7 @@ TEMP=$(getopt -o h \
 --long help,\
 prefix:,srcdir:,bindir:,\
 infodir:,mandir:,\
-without-libungif,without-libjpeg,without-libpng \
+without-libungif,without-libjpeg,without-libpng,without-bmp \
 -n "$BASENAME" -- "$@")
 
 if [ $? != 0 ] ; then help ; exit 1 ; fi
@@ -70,6 +72,7 @@ while true ; do
 		--without-libungif) ungif="disabled" ; shift ;;
 		--without-libjpeg) jpeg="disabled" ; shift ;;
 		--without-libpng) png="disabled" ; shift ;;
+		--without-bmp) bmp="disabled" ; shift ;;
 
 		--) shift ; break ;;
 		*) help ; exit 1 ;;
@@ -139,6 +142,13 @@ fi
 echo $png
 echo "libpng: $png" >> ./config.log
 ###
+echo -n "building with bmp support... "
+if [ "$bmp" != "disabled" ]; then
+bmp="yes"
+fi
+echo $bmp
+echo "bmp: $bmp" >> ./config.log
+###
 rm -f \$\$~test \$\$~test.c
 ###
 echo -n "checking for DEFAULT_FRAMEBUFFER... "
@@ -157,6 +167,7 @@ echo "#define DEFAULT_FRAMEBUFFER \"$dfb\"" | tee -a ./config.log >>config.h
 [ "$ungif" != "disabled" ] && echo "#define FBV_SUPPORT_GIF" | tee -a ./config.log >>config.h
 [ "$jpeg" != "disabled" ] && echo "#define FBV_SUPPORT_JPEG" | tee -a ./config.log >>config.h
 [ "$png" != "disabled" ] && echo "#define FBV_SUPPORT_PNG" | tee -a ./config.log >>config.h
+[ "$bmp" != "disabled" ] && echo "#define FBV_SUPPORT_BMP" | tee -a ./config.log >>config.h
 echo "installation dir: $bindir"
 echo "manuals dir: $mandir"
 

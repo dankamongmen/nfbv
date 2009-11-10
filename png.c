@@ -1,6 +1,6 @@
 #include "config.h"
 #ifdef FBV_SUPPORT_PNG
-#include "png.h"
+#include <png.h>
 #include "fbv.h"
 #include <sys/types.h>
 #include <sys/stat.h>

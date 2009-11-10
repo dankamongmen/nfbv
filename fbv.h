@@ -7,5 +7,5 @@ struct formathandler
 };
 
 #define FH_ERROR_OK 0
-#define FH_ERROR_FILE 1
-#define FH_ERROR_FORMAT 2
+#define FH_ERROR_FILE 1		/* read/access error */
+#define FH_ERROR_FORMAT 2	/* file format error */

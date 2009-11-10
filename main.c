@@ -75,6 +75,11 @@ void add_format(int (*picsize)(char *,int *,int*),int (*picread)(char *,unsigned
     extern int fh_png_load(char *,unsigned char *,int,int);
     extern int fh_png_id(char *);
 #endif
+#ifdef FBV_SUPPORT_BMP
+    extern int fh_bmp_getsize(char *,int *,int*);
+    extern int fh_bmp_load(char *,unsigned char *,int,int);
+    extern int fh_bmp_id(char *);
+#endif
 
 void init_handlers(void)
 {
@@ -86,6 +91,9 @@ void init_handlers(void)
 #endif
 #ifdef FBV_SUPPORT_PNG
     add_format(fh_png_getsize,fh_png_load,fh_png_id);
+#endif
+#ifdef FBV_SUPPORT_BMP
+    add_format(fh_bmp_getsize,fh_bmp_load,fh_bmp_id);
 #endif
 }
 
@@ -210,7 +218,7 @@ void help(char *name)
 	       " --colorstretch | -k : Strech (using color average resize) the image to fit onto screen if necessary\n"
                " --delay 	| -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
 	       "Use a,d,w and x to scroll the image\n\n"
-	       "%s/2000-2001, http://s-tech.elsat.net.pl\n",name,IDSTRING);
+	       "%s/2000-2002, http://s-tech.elsat.net.pl\n",name,IDSTRING);
 }
 
 extern int optind;

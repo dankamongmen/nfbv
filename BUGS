@@ -1,4 +1,7 @@
-Some gifs crash.
-(interlace ones)
+Some GIFs crash.
+(interlaced ones?)
 
-Will be fixed in the future. (we hope)
+Interlaced PNGs do not decode completely.
+(probably libpng bug)
+
+This'll be fixed in the future. (we hope)
