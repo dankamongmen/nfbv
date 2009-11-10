@@ -3,7 +3,7 @@
 
 A simple program to view pictures on a framebuffer console.
 
-We were just unable to find something doing the same thing in the Internet,
+We were just unable to find something doing the same thing on the Internet,
 "If You need something - write it Yourself".. ;->
 
 Instalation:
@@ -15,6 +15,6 @@ Just type "fbv" and a help message will appear.
 
 Some code was based on fbset utility.
 Image decoding engine uses libungif, libjpeg, libpng.
-BMP decoder written from scratch by smoku.
+BMP decoder was written from scratch by smoku.
 
 Many thanks to all fb-contributors over there - great work guys!

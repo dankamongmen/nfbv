@@ -6,3 +6,5 @@ Marcin 'Piaskowy' Ziêba <piaskowy@irc.pl>
         minior updates
 Mauro 'Gildo' Meneghin <mmeneghin@inwind.it>
 	interlaced GIF support
+Nat Ersoz <nat.ersoz@myrio.com>
+        minor fixes in fb_display.c

@@ -1,3 +1,8 @@
+0.98    2002-12-05      Nat Ersoz       nat.ersoz@myrio.com
+        * fbv now supports the "stride" feature (it works (hopefully)
+	  well when a device supports a line length longer than
+	  the viewable graphics display)
+
 0.96	2002-01-15	Tomasz Sterna	smoku@jaszczur.org
 
 	* BMP files support

@@ -52,25 +52,31 @@ void blit2FB(int fh, void *fbbuff,
 void fb_display(unsigned char *rgbbuff, int x_size, int y_size, int x_pan, int y_pan, int x_offs, int y_offs)
 {
     struct fb_var_screeninfo var;
+    struct fb_fix_screeninfo fix;
     unsigned short *fbbuff = NULL;
     int fh = -1, bp = 0;
+    unsigned long x_stride;
     
     /* get the framebuffer device handle */
     fh = openFB(NULL);
     
     /* read current video mode */
     getVarScreenInfo(fh, &var);
+    getFixScreenInfo(fh, &fix);
+    
+    x_stride = (fix.line_length * 8) / var.bits_per_pixel;
+    
     
     /* correct panning */
-    if(x_pan > x_size - var.xres) x_pan = 0;
+    if(x_pan > x_size - x_stride) x_pan = 0;
     if(y_pan > y_size - var.yres) y_pan = 0;
     /* correct offset */
-    if(x_offs + x_size > var.xres) x_offs = 0;
+    if(x_offs + x_size > x_stride) x_offs = 0;
     if(y_offs + y_size > var.yres) y_offs = 0;
     
     /* blit buffer 2 fb */
     fbbuff = convertRGB2FB(fh, rgbbuff, x_size * y_size, var.bits_per_pixel, &bp);
-    blit2FB(fh, fbbuff, x_size, y_size, var.xres, var.yres, x_pan, y_pan, x_offs, y_offs, bp);
+    blit2FB(fh, fbbuff, x_size, y_size, x_stride, var.yres, x_pan, y_pan, x_offs, y_offs, bp);
     free(fbbuff);
     
     /* close device */
