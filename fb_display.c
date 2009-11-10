@@ -1,4 +1,4 @@
-/*
+/*`
     fbv  --  simple image viewer for the linux framebuffer
     Copyright (C) 2000  Tomasz Sterna
     Copyright (C) 2003  Mateusz Golicz
@@ -89,9 +89,13 @@ void fb_display(unsigned char *rgbbuff, unsigned char * alpha, int x_size, int y
     
     /* blit buffer 2 fb */
     fbbuff = convertRGB2FB(fh, rgbbuff, x_size * y_size, var.bits_per_pixel, &bp);
+#if 0
     blit2FB(fh, fbbuff, alpha, x_size, y_size, x_stride, var.yres, x_pan, y_pan, x_offs, y_offs, bp);
+#else
+    blit2FB(fh, fbbuff, alpha, x_size, y_size, x_stride, var.yres_virtual, x_pan, y_pan, x_offs, y_offs + var.yoffset, bp);
+#endif
     free(fbbuff);
-    
+   
     /* close device */
     closeFB(fh);
 }

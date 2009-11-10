@@ -5,13 +5,14 @@
 
 include Make.conf
 
-CC	= gcc -O2 -Wall
+CC	= gcc 
+CFLAGS  = -O2 -Wall -D_GNU_SOURCE
 
-SOURCES	= main.c jpeg.c gif.c png.c bmp.c fb_display.c resize.c
+SOURCES	= main.c jpeg.c gif.c png.c bmp.c fb_display.c transforms.c
 OBJECTS	= ${SOURCES:.c=.o}
 
 OUT	= fbv
-LIBS	= -lungif -lX11 -L/usr/X11R6/lib -ljpeg -lpng
+#LIBS	= -lungif -L/usr/X11R6/lib -ljpeg -lpng
 
 all: $(OUT)
 	@echo Build DONE.

@@ -1,312 +1,582 @@
 /*
-    fbv  --  simple image viewer for the linux framebuffer
-    Copyright (C) 2000, 2001, 2003  Mateusz Golicz
+	fbv  --  simple image viewer for the linux framebuffer
+	Copyright (C) 2000, 2001, 2003, 2004  Mateusz 'mteg' Golicz
 
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
+	This program is free software; you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation; either version 2 of the License, or
+	(at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+	You should have received a copy of the GNU General Public License
+	along with this program; if not, write to the Free Software
+	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include "config.h"
-#include "fbv.h"
 #include <stdio.h>
-#include <termios.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <stdlib.h>
+#include <termios.h>
 #include <string.h>
-#define min(a,b) ((a) < (b) ? (a) : (b))
-#define max(a,b) ((a) > (b) ? (a) : (b))
-#define SHOWDELAY 100000
-#define NEXT_IMG -3
-#define PREV_IMG -4
+#include <signal.h>
+#include "config.h"
+#include "fbv.h"
 
-extern unsigned char * simple_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
-extern unsigned char * alpha_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
-extern unsigned char * color_average_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
+#define PAN_STEPPING 20
+
+static int opt_clear = 1,
+	   opt_alpha = 0,
+	   opt_hide_cursor = 1,
+	   opt_image_info = 1,
+	   opt_stretch = 0,
+	   opt_delay = 0,
+	   opt_enlarge = 0,
+	   opt_ignore_aspect = 0;
 
 
-int clear=1,delay=0,hide=1,dispinfo=1,allowstrech=0,opt_alpha = 0;
 
-struct formathandler *fh_root=NULL;
-
-struct termios oldtermios;
-struct termios ourtermios;
-
-int imm_getchar(int s,int us)
+void setup_console(int t)
 {
-    struct timeval tv;
-    unsigned char c;
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(0,&fds);
-    tv.tv_sec=s; tv.tv_usec=us;
-    if(select(1,&fds,NULL,NULL,&tv))
-    {
-	read(0,&c,1);
-	return((int) c);
-    }
-    else
-	return(EOF);
-}
+	struct termios our_termios;
+	static struct termios old_termios;
 
-void contoraw(void)
-{
-    tcgetattr(0,&oldtermios);
-    memcpy(&ourtermios,&oldtermios,sizeof(struct termios));
-    ourtermios.c_lflag&=!(ECHO|ICANON);
-    tcsetattr(0,TCSANOW,&ourtermios);
-}
-void connorm(void)
-{
-    tcsetattr(0,TCSANOW,&oldtermios);
-}
-
-
-void add_format(int (*picsize)(char *,int *,int*),int (*picread)(char *,unsigned char *,unsigned char**,int,int), int (*id)(char*))
-{
-    struct formathandler *fhn;
-    fhn=(struct formathandler*) malloc(sizeof(struct formathandler));
-    fhn->get_size=picsize; fhn->get_pic=picread; fhn->id_pic=id;
-    fhn->next=fh_root; fh_root=fhn;
-}
-#ifdef FBV_SUPPORT_GIF
-    extern int fh_gif_getsize(char *,int *,int*);
-    extern int fh_gif_load(char *,unsigned char *,unsigned char **, int,int);
-    extern int fh_gif_id(char *);
-#endif
-#ifdef FBV_SUPPORT_JPEG
-    extern int fh_jpeg_getsize(char *,int *,int*);
-    extern int fh_jpeg_load(char *,unsigned char *,unsigned char **, int,int);
-    extern int fh_jpeg_id(char *);
-#endif
-#ifdef FBV_SUPPORT_PNG
-    extern int fh_png_getsize(char *,int *,int*);
-    extern int fh_png_load(char *,unsigned char *,unsigned char **,int,int);
-    extern int fh_png_id(char *);
-#endif
-#ifdef FBV_SUPPORT_BMP
-    extern int fh_bmp_getsize(char *,int *,int*);
-    extern int fh_bmp_load(char *,unsigned char *,unsigned char **, int,int);
-    extern int fh_bmp_id(char *);
-#endif
-
-void init_handlers(void)
-{
-#ifdef FBV_SUPPORT_GIF
-    add_format(fh_gif_getsize,fh_gif_load,fh_gif_id);
-#endif
-#ifdef FBV_SUPPORT_JPEG
-    add_format(fh_jpeg_getsize,fh_jpeg_load,fh_jpeg_id);
-#endif
-#ifdef FBV_SUPPORT_PNG
-    add_format(fh_png_getsize,fh_png_load,fh_png_id);
-#endif
-#ifdef FBV_SUPPORT_BMP
-    add_format(fh_bmp_getsize,fh_bmp_load,fh_bmp_id);
-#endif
-}
-
-struct formathandler * fh_getsize(char *name,int *x,int *y)
-{
-    struct formathandler *fh;
-    for(fh=fh_root;fh!=NULL;fh=fh->next)
-    {
-	if(fh->id_pic(name))
-	    if(fh->get_size(name,x,y)==FH_ERROR_OK) return(fh);
-    }
-    return(NULL);
-}
-
-int show_image(char *name)
-{
-    int x,y,xs,ys,xpos,ypos,xdelta,ydelta,c,eol,xstep,ystep,rfrsh,imx,imy;
-    unsigned char *buffer;
-    unsigned char *alpha = NULL;
-    struct formathandler *fh;
-    eol=1;
-    if((fh=fh_getsize(name,&x,&y)))
-    {
-	buffer=(unsigned char *) malloc(x*y*3);
-	if(fh->get_pic(name,buffer,&alpha,x,y)==FH_ERROR_OK)
+	if(t)
 	{
-	    if(clear) { printf("\033[H\033[J"); fflush(stdout); usleep(SHOWDELAY); } /* temporary solution */
-	    if(dispinfo) printf("%s\n%s\n%d x %d\n",IDSTRING,name,x,y); 
-	    contoraw();
-	    getCurrentRes(&xs,&ys);
-	    if((x>xs || y>ys) && allowstrech)
-	    {
-		if( (y*xs/x) <= ys)
-		{
-		    imx=xs;
-		    imy=y*xs/x;
-		}
-		else
-		{
-		    imx=x*ys/y;
-		    imy=ys;
-		}
-		if(allowstrech==1)
-		    buffer=simple_resize(buffer,x,y,imx,imy);
-		else
-		    buffer=color_average_resize(buffer,x,y,imx,imy);
-		if(alpha)
-		    alpha=alpha_resize(alpha,x,y,imx,imy);
-	        x=imx; y=imy;
-	    }
-	    
-	    if(x<xs) xpos=(xs-x)/2; else xpos=0;
-	    if(y<ys) ypos=(ys-y)/2; else ypos=0;
-	    xdelta=0; ydelta=0;
-
-	    xstep=min(max(x/20,1),xs);
-	    ystep=min(max(y/20,1),ys);
-
-	    for(eol=-1,rfrsh=1;eol==-1;)
-	    {
-		if(rfrsh)
-			fb_display(buffer, opt_alpha ? alpha : NULL, x,y,xdelta,ydelta,xpos,ypos);
-		rfrsh=0;
-		if(!delay)
-		{
-		    c=getchar();
-		    switch(c)
-		    {
-			case 'a': case 'D':
-		    	    xdelta-=xstep;
-			    if(xdelta<0) xdelta=0;
-			    rfrsh=1;
-			    break;
-			case 'd': case 'C':
-			    if(xpos) break;
-			    xdelta+=xstep;
-			    if(xdelta>(x-xs)) xdelta=x-xs;
-			    rfrsh=1;
-			    break;
-			case 'w': case 'A':
-			    ydelta-=ystep;
-			    if(ydelta<0) ydelta=0;
-			    rfrsh=1;
-			    break;
-			case 'x': case 'B':
-			    if(ypos) break;
-			    ydelta+=ystep;
-			    if(ydelta>(y-ys)) ydelta=y-ys;
-			    rfrsh=1;
-			    break;
-			case ' ': case 10: eol=1; break;
-			case 'r': rfrsh=1; break;
-			case '.': case '>': eol=NEXT_IMG; break;
-			case ',': case '<': case 127: case 255: eol=PREV_IMG; break;
-			case 'q': eol=0; break;
-		    }
-		}
-		else
-		{
-		    if(imm_getchar(delay / 10,delay % 10)=='q') eol=0; else eol=1;
-		    break;
-		}
-	    }
-	    connorm();
-	    if(clear) { printf("\033[0m\033[H\033[J"); fflush(stdout); }
+		tcgetattr(0, &old_termios);
+		memcpy(&our_termios, &old_termios, sizeof(struct termios));
+		our_termios.c_lflag &= !(ECHO | ICANON);
+		tcsetattr(0, TCSANOW, &our_termios);
 	}
 	else
-	    printf("Unable to read file !\n");
-	free(buffer);
-	free(alpha);
-    }
-    else
-	printf("Unable to read file or file format not recognized!\n");
+		tcsetattr(0, TCSANOW, &old_termios);
 	
-    return(eol);
+}
+
+static inline void do_rotate(struct image *i, int rot)
+{
+	if(rot)
+	{
+		unsigned char *image, *alpha = NULL;
+		int t;
+		
+		image = rotate(i->rgb, i->width, i->height, rot);
+		if(i->alpha)
+			alpha = alpha_rotate(i->alpha, i->width, i->height, rot);
+		if(i->do_free)
+		{
+			free(i->alpha);
+			free(i->rgb);
+		}
+		
+		i->rgb = image;
+		i->alpha = alpha;
+		i->do_free = 1;
+		
+		if(rot & 1)
+		{
+			t = i->width;
+			i->width = i->height;
+			i->height = t;
+		}
+	}
+}
+
+
+static inline void do_enlarge(struct image *i, int screen_width, int screen_height, int ignoreaspect)
+{
+	if(((i->width > screen_width) || (i->height > screen_height)) && (!ignoreaspect))
+		return;
+	if((i->width < screen_width) || (i->height < screen_height))
+	{
+		int xsize = i->width, ysize = i->height;
+		unsigned char * image, * alpha = NULL;
+		
+		if(ignoreaspect)
+		{
+			if(i->width < screen_width)
+				xsize = screen_width;
+			if(i->height < screen_height)
+				ysize = screen_height;
+			
+			goto have_sizes;
+		}
+		
+		if((i->height * screen_width / i->width) <= screen_height)
+		{
+			xsize = screen_width;
+			ysize = i->height * screen_width / i->width;
+			goto have_sizes;
+		}
+		
+		if((i->width * screen_height / i->height) <= screen_width)
+		{
+			xsize = i->width * screen_height / i->height;
+			ysize = screen_height;
+			goto have_sizes;
+		}
+		return;
+have_sizes:
+		image = simple_resize(i->rgb, i->width, i->height, xsize, ysize);
+		if(i->alpha)
+			alpha = alpha_resize(i->alpha, i->width, i->height, xsize, ysize);
+		
+		if(i->do_free)
+		{
+			free(i->alpha);
+			free(i->rgb);
+		}
+		
+		i->rgb = image;
+		i->alpha = alpha;
+		i->do_free = 1;
+		i->width = xsize;
+		i->height = ysize;
+	}
+}
+
+
+static inline void do_fit_to_screen(struct image *i, int screen_width, int screen_height, int ignoreaspect, int cal)
+{
+	if((i->width > screen_width) || (i->height > screen_height))
+	{
+		unsigned char * new_image, * new_alpha = NULL;
+		int nx_size = i->width, ny_size = i->height;
+		
+		if(ignoreaspect)
+		{
+			if(i->width > screen_width)
+				nx_size = screen_width;
+			if(i->height > screen_height)
+				ny_size = screen_height;
+		}
+		else
+		{
+			if((i->height * screen_width / i->width) <= screen_height)
+			{
+				nx_size = screen_width;
+				ny_size = i->height * screen_width / i->width;
+			}
+			else
+			{
+				nx_size = i->width * screen_height / i->height;
+				ny_size = screen_height;
+			}
+		}
+		
+		if(cal)
+			new_image = color_average_resize(i->rgb, i->width, i->height, nx_size, ny_size);
+		else
+			new_image = simple_resize(i->rgb, i->width, i->height, nx_size, ny_size);
+		
+		if(i->alpha)
+			new_alpha = alpha_resize(i->alpha, i->width, i->height, nx_size, ny_size);
+		
+		if(i->do_free)
+		{
+			free(i->alpha);
+			free(i->rgb);
+		}
+		
+		i->rgb = new_image;
+		i->alpha = new_alpha;
+		i->do_free = 1;
+		i->width = nx_size;
+		i->height = ny_size;
+	}
+}
+
+
+int show_image(char *filename)
+{
+	int (*load)(char *, unsigned char *, unsigned char **, int, int);
+
+	unsigned char * image = NULL;
+	unsigned char * alpha = NULL;
+	
+	int x_size, y_size, screen_width, screen_height;
+	int x_pan, y_pan, x_offs, y_offs, refresh = 1, c, ret = 1;
+	int delay = opt_delay, retransform = 1;
+	
+	int transform_stretch = opt_stretch, transform_enlarge = opt_enlarge, transform_cal = (opt_stretch == 2),
+	    transform_iaspect = opt_ignore_aspect, transform_rotation = 0;
+	
+	struct image i;
+	
+#ifdef FBV_SUPPORT_GIF
+	if(fh_gif_id(filename))
+		if(fh_gif_getsize(filename, &x_size, &y_size) == FH_ERROR_OK)
+		{
+			load = fh_gif_load;
+			goto identified;
+		}
+#endif
+
+#ifdef FBV_SUPPORT_PNG
+	if(fh_png_id(filename))
+		if(fh_png_getsize(filename, &x_size, &y_size) == FH_ERROR_OK)
+		{
+			load = fh_png_load;
+			goto identified;
+		}
+#endif
+
+#ifdef FBV_SUPPORT_JPEG
+	if(fh_jpeg_id(filename))
+		if(fh_jpeg_getsize(filename, &x_size, &y_size) == FH_ERROR_OK)
+		{
+			load = fh_jpeg_load;
+			goto identified;
+		}
+#endif
+
+#ifdef FBV_SUPPORT_BMP
+	if(fh_bmp_id(filename))
+		if(fh_bmp_getsize(filename, &x_size, &y_size) == FH_ERROR_OK)
+		{
+			load = fh_bmp_load;
+			goto identified;
+		}
+#endif
+	fprintf(stderr, "%s: Unable to access file or file format unknown.\n", filename);
+	return(1);
+
+identified:
+	
+	if(!(image = (unsigned char*) malloc(x_size * y_size * 3)))
+	{
+		fprintf(stderr, "%s: Out of memory.\n", filename);
+		goto error_mem;
+	}
+	
+	if(load(filename, image, &alpha, x_size, y_size) != FH_ERROR_OK)
+	{
+		fprintf(stderr, "%s: Image data is corrupt?\n", filename);
+		goto error_mem;
+	}
+	
+	if(!opt_alpha)
+	{
+		free(alpha);
+		alpha = NULL;
+	}
+	
+	
+
+	getCurrentRes(&screen_width, &screen_height);
+	i.do_free = 0;
+	while(1)
+	{
+		if(retransform)
+		{
+			if(i.do_free)
+			{
+				free(i.rgb);
+				free(i.alpha);
+			}
+			i.width = x_size;
+			i.height = y_size;
+			i.rgb = image;
+			i.alpha = alpha;
+			i.do_free = 0;
+	
+	
+			if(transform_rotation)
+				do_rotate(&i, transform_rotation);
+				
+			if(transform_stretch)
+				do_fit_to_screen(&i, screen_width, screen_height, transform_iaspect, transform_cal);
+	
+			if(transform_enlarge)
+				do_enlarge(&i, screen_width, screen_height, transform_iaspect);
+
+			x_pan = y_pan = 0;
+			refresh = 1; retransform = 0;
+			if(opt_clear)
+			{
+				printf("\033[H\033[J");
+				fflush(stdout);
+			}
+			if(opt_image_info)
+				printf("fbv - The Framebuffer Viewer\n%s\n%d x %d\n", filename, x_size, y_size); 
+		}
+		if(refresh)
+		{
+			if(i.width < screen_width)
+				x_offs = (screen_width - i.width) / 2;
+			else
+				x_offs = 0;
+			
+			if(i.height < screen_height)
+				y_offs = (screen_height - i.height) / 2;
+			else
+				y_offs = 0;
+			
+			fb_display(i.rgb, i.alpha, i.width, i.height, x_pan, y_pan, x_offs, y_offs);
+			refresh = 0;
+		}
+		if(delay)
+		{
+			struct timeval tv;
+			fd_set fds;
+			tv.tv_sec = delay / 10;
+			tv.tv_usec = (delay % 10) * 100000;
+			FD_ZERO(&fds);
+			FD_SET(0, &fds);
+			
+			if(select(1, &fds, NULL, NULL, &tv) <= 0)
+				break;
+			delay = 0;
+		}
+		
+		c = getchar();
+		switch(c)
+		{
+			case EOF:
+			case 'q':
+				ret = 0;
+				goto done;
+			case ' ': case 10: case 13: 
+				goto done;
+			case '>': case '.':
+				goto done;
+			case '<': case ',':
+				ret = -1;
+				goto done;
+			case 'r':
+				refresh = 1;
+				break;
+			case 'a': case 'D':
+				if(x_pan == 0) break;
+				x_pan -= i.width / PAN_STEPPING;
+				if(x_pan < 0) x_pan = 0;
+				refresh = 1;
+				break;
+			case 'd': case 'C':
+				if(x_offs) break;
+				if(x_pan >= (i.width - screen_width)) break;
+				x_pan += i.width / PAN_STEPPING;
+				if(x_pan > (i.width - screen_width)) x_pan = i.width - screen_width;
+				refresh = 1;
+				break;
+			case 'w': case 'A':
+				if(y_pan == 0) break;
+				y_pan -= i.height / PAN_STEPPING;
+				if(y_pan < 0) y_pan = 0;
+				refresh = 1;
+				break;
+			case 'x': case 'B':
+				if(y_offs) break;
+				if(y_pan >= (i.height - screen_height)) break;
+				y_pan += i.height / PAN_STEPPING;
+				if(y_pan > (i.height - screen_height)) y_pan = i.height - screen_height;
+				refresh = 1;
+				break;
+			case 'f': 
+				transform_stretch = !transform_stretch;
+				retransform = 1;
+				break;
+			case 'e':
+				transform_enlarge = !transform_enlarge;
+				retransform = 1;
+				break;
+			case 'k':
+				transform_cal = !transform_cal;
+				retransform = 1;
+				break;
+			case 'i':
+				transform_iaspect = !transform_iaspect;
+				retransform = 1;
+				break;
+			case 'p':
+				transform_cal = 0;
+				transform_iaspect = 0;
+				transform_enlarge = 0;
+				transform_stretch = 0;
+				retransform = 1;
+				break;
+			case 'n':
+				transform_rotation -= 1;
+				if(transform_rotation < 0)
+					transform_rotation += 4;
+				retransform = 1;
+				break;
+			case 'm':
+				transform_rotation += 1;
+				if(transform_rotation > 3)
+					transform_rotation -= 4;
+				retransform = 1;
+				break;
+			
+		}
+		
+	}
+
+done:
+	if(opt_clear)
+	{
+		printf("\033[H\033[J");
+		fflush(stdout);
+	}
+	
+error_mem:
+	free(image);
+	free(alpha);
+	if(i.do_free)
+	{
+		free(i.rgb);
+		free(i.alpha);
+	}
+	return(ret);
+
 }
 
 void help(char *name)
 {
 	printf("Usage: %s [options] image1 image2 image3 ...\n\n"
-	       "Available options:\n"
-	       " --help 	| -h : Show this help\n"
-	       " --alpha 	| -a : Use alpha channel (if applicable)\n"
-	       " --noclear 	| -c : Do not clear the screen before/after displaying image\n"
-	       " --unhide 	| -u : Do not hide/show the cursor before/after displaying image\n"
-	       " --noinfo 	| -i : Supress image information\n"
-	       " --stretch	| -f : Strech (using a simple resizing routine) the image to fit onto screen if necessary\n"
-	       " --colorstretch | -k : Strech (using a 'color average' resizing routine) the image to fit onto screen if necessary\n"
-           " --delay 	| -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
-	       "Use a,d,w and x to scroll the image\n\n"
-	       "fbv 0.99 Copyright (C) 2000 - 2003 Mateusz Golicz, Tomasz Sterna.\n", name);
+		   "Available options:\n"
+		   " --help        | -h : Show this help\n"
+		   " --alpha       | -a : Use the alpha channel (if applicable)\n"
+		   " --dontclear   | -c : Do not clear the screen before and after displaying the image\n"
+		   " --donthide    | -u : Do not hide the cursor before and after displaying the image\n"
+		   " --noinfo      | -i : Supress image information\n"
+		   " --stretch     | -f : Strech (using a simple resizing routine) the image to fit onto screen if necessary\n"
+		   " --colorstretch| -k : Strech (using a 'color average' resizing routine) the image to fit onto screen if necessary\n"
+		   " --enlarge     | -e : Enlarge the image to fit the whole screen if necessary\n"
+		   " --ignore-aspect| -r : Ignore the image aspect while resizing\n"
+                   " --delay <d>   | -s <delay> : Slideshow, 'delay' is the slideshow delay in tenths of seconds.\n\n"
+		   "Keys:\n"
+		   " r            : Redraw the image\n"
+		   " a, d, w, x   : Pan the image\n"
+		   " f            : Toggle resizing on/off\n"
+		   " k            : Toggle resizing quality\n"
+		   " e            : Toggle enlarging on/off\n"
+		   " i            : Toggle respecting the image aspect on/off\n"
+		   " n            : Rotate the image 90 degrees left\n"
+		   " m            : Rotate the image 90 degrees right\n"
+		   " p            : Disable all transformations\n"
+		   "Copyright (C) 2000 - 2004 Mateusz Golicz, Tomasz Sterna.\n", name);
 }
 
-extern int optind;
-extern char *optarg;
-
-int main(int argc,char **argv)
+void sighandler(int s)
 {
-    int opt,a,r;
-    
-    static struct option long_options[] =
-    {
-	{"help",	no_argument,	0, 'h'},
-    {"noclear", 	no_argument, 	0, 'c'},
-    {"alpha", 	no_argument, 	0, 'a'},
-	{"unhide",  	no_argument, 	0, 'h'},
-	{"noinfo",  	no_argument, 	0, 'i'},
-	{"stretch", 	no_argument, 	0, 'f'},
-	{"colorstrech", no_argument, 	0, 'k'},
-	{"delay", 	required_argument, 0, 's'},
-	{0, 0, 0, 0}
-    };
-
-    init_handlers();																       
-    
-    if(argc<2)
-	help(argv[0]);
-    else
-    {
-	for(;;)
+	if(opt_hide_cursor)
 	{
-	    opt=getopt_long_only(argc,argv,"achukfis:",long_options,NULL);
-	    if(opt==EOF) break;
-	    switch(opt)
-	    {
-		case 'a': opt_alpha = 1; break;
-		case 'c': clear=0; break;
-		case 's': if(optarg) delay=atoi(optarg); break;
-		case 'u': hide=0; break;
-		case 'h': help(argv[0]); break;
-		case 'i': dispinfo=0; break;
-		case 'f': allowstrech=1; break;
-		case 'k': allowstrech=2; break;
-	    }
+		printf("\033[?25h");
+		fflush(stdout);
 	}
-	if(argv[optind]==NULL) {printf("You have to specify a filename!\n"); return(1);}
-	while(imm_getchar(0,0)!=EOF);
-	if(hide) printf("\033[?25l");
-	for(a=optind;argv[a]!=NULL;a++) 
+	setup_console(0);
+	_exit(128 + s);
+	
+}
+
+int main(int argc, char **argv)
+{
+	static struct option long_options[] =
 	{
-	    r=show_image(argv[a]);
-	    if(!r) break;
-	    if(r==PREV_IMG)
+		{"help",	no_argument,	0, 'h'},
+		{"noclear", 	no_argument, 	0, 'c'},
+		{"alpha", 	no_argument, 	0, 'a'},
+		{"unhide",  	no_argument, 	0, 'u'},
+		{"noinfo",  	no_argument, 	0, 'i'},
+		{"stretch", 	no_argument, 	0, 'f'},
+		{"colorstrech", no_argument, 	0, 'k'},
+		{"delay", 	required_argument, 0, 's'},
+		{"enlarge",	no_argument,	0, 'e'},
+		{"ignore-aspect", no_argument,	0, 'r'},
+		{0, 0, 0, 0}
+	};
+	int c, i;
+	
+	if(argc < 2)
+	{
+		help(argv[0]);
+		fprintf(stderr, "Error: Required argument missing.\n");
+		return(1);
+	}
+	
+	while((c = getopt_long_only(argc, argv, "hcauifks:er", long_options, NULL)) != EOF)
+	{
+		switch(c)
 		{
-			if((a-1)>=optind)
-		    	a-=2;
-			else
-		    	a-=1;
+			case 'a':
+				opt_alpha = 1;
+				break;
+			case 'c':
+				opt_clear = 0;
+				break;
+			case 's':
+				opt_delay = atoi(optarg);
+				break;
+			case 'u':
+				opt_hide_cursor = 0;
+				break;
+			case 'h':
+				help(argv[0]);
+				return(0);
+			case 'i':
+				opt_image_info = 0;
+				break;
+			case 'f':
+				opt_stretch = 1;
+				break;
+			case 'k':
+				opt_stretch = 2;
+				break;
+			case 'e':
+				opt_enlarge = 1;
+				break;
+			case 'r':
+				opt_ignore_aspect = 1;
+				break;
 		}
 	}
-	if(hide) printf("\033[?25h");
-    }
-    return(0);
+	
+	
+	if(!argv[optind])
+	{
+		fprintf(stderr, "Required argument missing! Consult %s -h.\n", argv[0]);
+		return(1);
+	}
+
+	signal(SIGHUP, sighandler);
+	signal(SIGINT, sighandler);
+	signal(SIGQUIT, sighandler);
+	signal(SIGSEGV, sighandler);
+	signal(SIGTERM, sighandler);
+	signal(SIGABRT, sighandler);
+	
+	if(opt_hide_cursor)
+	{
+		printf("\033[?25l");
+		fflush(stdout);
+	}
+	
+	setup_console(1);
+
+	for(i = optind; argv[i]; )
+	{
+		int r = show_image(argv[i]);
+	
+		if(!r) break;
+		
+		i += r;
+		if(i < optind)
+			i = optind;
+	}
+
+	setup_console(0);
+
+	if(opt_hide_cursor)
+	{
+		printf("\033[?25h");
+		fflush(stdout);
+	}
+	return(0);	
 }
