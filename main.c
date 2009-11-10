@@ -201,13 +201,14 @@ int show_image(char *filename)
 	unsigned char * alpha = NULL;
 	
 	int x_size, y_size, screen_width, screen_height;
-	int x_pan, y_pan, x_offs, y_offs, refresh = 1, c, ret = 1;
+	int x_pan = 0, y_pan = 0, x_offs = 0, y_offs = 0, refresh = 1, c, ret = 1;
 	int delay = opt_delay, retransform = 1;
 	
 	int transform_stretch = opt_stretch, transform_enlarge = opt_enlarge, transform_cal = (opt_stretch == 2),
 	    transform_iaspect = opt_ignore_aspect, transform_rotation = 0;
 	
 	struct image i;
+	memset(&i, 0, sizeof(struct image));
 	
 #ifdef FBV_SUPPORT_GIF
 	if(fh_gif_id(filename))
