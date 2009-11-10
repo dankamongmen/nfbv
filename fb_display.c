@@ -6,7 +6,7 @@
 
 /* Public Use Functions:
  *
- * extern void fb_display(char *rgbbuff,
+ * extern void fb_display(unsigned char *rgbbuff,
  *     int x_size, int y_size,
  *     int x_pan, int y_pan,
  *     int x_offs, int y_offs);
@@ -19,6 +19,8 @@
 
 unsigned short red[256], green[256], blue[256];
 struct fb_cmap map332 = {0, 256, red, green, blue, NULL};
+unsigned short red_b[256], green_b[256], blue_b[256];
+struct fb_cmap map_back = {0, 256, red_b, green_b, blue_b, NULL};
 
 
 int openFB(const char *name);
@@ -27,7 +29,7 @@ void getVarScreenInfo(int fh, struct fb_var_screeninfo *var);
 void setVarScreenInfo(int fh, struct fb_var_screeninfo *var);
 void getFixScreenInfo(int fh, struct fb_fix_screeninfo *fix);
 void set332map(int fh);
-void* convertRGB2FB(int fh, char *rgbbuff, unsigned long count, int bpp, int *cpp);
+void* convertRGB2FB(int fh, unsigned char *rgbbuff, unsigned long count, int bpp, int *cpp);
 void blit2FB(int fh, void *fbbuff,
 	unsigned int pic_xs, unsigned int pic_ys,
 	unsigned int scr_xs, unsigned int scr_ys,
@@ -35,7 +37,7 @@ void blit2FB(int fh, void *fbbuff,
 	unsigned int xoffs, unsigned int yoffs,
 	int cpp);
 
-void fb_display(char *rgbbuff, int x_size, int y_size, int x_pan, int y_pan, int x_offs, int y_offs)
+void fb_display(unsigned char *rgbbuff, int x_size, int y_size, int x_pan, int y_pan, int x_offs, int y_offs)
 {
     struct fb_var_screeninfo var;
     unsigned short *fbbuff = NULL;
@@ -121,66 +123,6 @@ void getFixScreenInfo(int fh, struct fb_fix_screeninfo *fix)
     }
 }
 
-void blit2FB(int fh, void *fbbuff,
-	unsigned int pic_xs, unsigned int pic_ys,
-	unsigned int scr_xs, unsigned int scr_ys,
-	unsigned int xp, unsigned int yp,
-	unsigned int xoffs, unsigned int yoffs,
-	int cpp)
-{
-    int i, xc, yc;
-    char *cp; unsigned short *sp; unsigned int *ip;
-    cp = (char *) sp = (unsigned short *) ip = (unsigned int *) fbbuff;
-
-    xc = (pic_xs > scr_xs) ? scr_xs : pic_xs;
-    yc = (pic_ys > scr_ys) ? scr_ys : pic_ys;
-    
-    switch(cpp){
-	case 1:
-	    for(i = 0; i < yc; i++){
-		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
-		write(fh, cp + (i+yp)*pic_xs+xp, xc*cpp);
-	    }
-	    break;
-	case 2:
-	    for(i = 0; i < yc; i++){
-		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
-		write(fh, sp + (i+yp)*pic_xs+xp, xc*cpp);
-	    }
-	    break;
-	case 4:
-	    for(i = 0; i < yc; i++){
-		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
-		write(fh, ip + (i+yp)*pic_xs+xp, xc*cpp);
-	    }
-	    break;
-    }
-}
-
-inline char make8color(char r, char g, char b)
-{
-    return (
-	(((r >> 5) & 7) << 5) |
-	(((g >> 5) & 7) << 2) |
-	 ((b >> 6) & 3)       );
-}
-
-inline unsigned short make15color(char r, char g, char b)
-{
-    return (
-	(((r >> 3) & 31) << 10) |
-	(((g >> 3) & 31) << 5)  |
-	 ((b >> 3) & 31)        );
-}
-
-inline unsigned short make16color(char r, char g, char b)
-{
-    return (
-	(((r >> 3) & 31) << 11) |
-	(((g >> 2) & 63) << 5)  |
-	 ((b >> 3) & 31)        );
-}
-
 void make332map(struct fb_cmap *map)
 {
 	int rs, gs, bs, i;
@@ -201,31 +143,104 @@ void make332map(struct fb_cmap *map)
 	}
 }
 
-void set332map(int fh)
+void set8map(int fh, struct fb_cmap *map)
 {
-    make332map(&map332);
-    
-    if (ioctl(fh, FBIOPUTCMAP, &map332) < 0) {
-        fprintf(stderr, "Error putting pseudo-truecolor colormap");
+    if (ioctl(fh, FBIOPUTCMAP, map) < 0) {
+        fprintf(stderr, "Error putting colormap");
         exit(1);
     }
 }
 
-void* convertRGB2FB(int fh, char *rgbbuff, unsigned long count, int bpp, int *cpp)
+void get8map(int fh, struct fb_cmap *map)
+{
+    if (ioctl(fh, FBIOGETCMAP, map) < 0) {
+        fprintf(stderr, "Error getting colormap");
+        exit(1);
+    }
+}
+
+void set332map(int fh)
+{
+    make332map(&map332);
+    set8map(fh, &map332);
+}
+
+void blit2FB(int fh, void *fbbuff,
+	unsigned int pic_xs, unsigned int pic_ys,
+	unsigned int scr_xs, unsigned int scr_ys,
+	unsigned int xp, unsigned int yp,
+	unsigned int xoffs, unsigned int yoffs,
+	int cpp)
+{
+    int i, xc, yc;
+    unsigned char *cp; unsigned short *sp; unsigned int *ip;
+    cp = (unsigned char *) sp = (unsigned short *) ip = (unsigned int *) fbbuff;
+
+    xc = (pic_xs > scr_xs) ? scr_xs : pic_xs;
+    yc = (pic_ys > scr_ys) ? scr_ys : pic_ys;
+    
+    switch(cpp){
+	case 1:
+	    get8map(fh, &map_back);
+	    set332map(fh);
+	    for(i = 0; i < yc; i++){
+		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
+		write(fh, cp + (i+yp)*pic_xs+xp, xc*cpp);
+	    }
+	    set8map(fh, &map_back);
+	    break;
+	case 2:
+	    for(i = 0; i < yc; i++){
+		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
+		write(fh, sp + (i+yp)*pic_xs+xp, xc*cpp);
+	    }
+	    break;
+	case 4:
+	    for(i = 0; i < yc; i++){
+		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
+		write(fh, ip + (i+yp)*pic_xs+xp, xc*cpp);
+	    }
+	    break;
+    }
+}
+
+inline unsigned char make8color(unsigned char r, unsigned char g, unsigned char b)
+{
+    return (
+	(((r >> 5) & 7) << 5) |
+	(((g >> 5) & 7) << 2) |
+	 ((b >> 6) & 3)       );
+}
+
+inline unsigned short make15color(unsigned char r, unsigned char g, unsigned char b)
+{
+    return (
+	(((r >> 3) & 31) << 10) |
+	(((g >> 3) & 31) << 5)  |
+	 ((b >> 3) & 31)        );
+}
+
+inline unsigned short make16color(unsigned char r, unsigned char g, unsigned char b)
+{
+    return (
+	(((r >> 3) & 31) << 11) |
+	(((g >> 2) & 63) << 5)  |
+	 ((b >> 3) & 31)        );
+}
+
+void* convertRGB2FB(int fh, unsigned char *rgbbuff, unsigned long count, int bpp, int *cpp)
 {
     unsigned long i;
     void *fbbuff = NULL;
-    char *c_fbbuff;
+    unsigned char *c_fbbuff;
     unsigned short *s_fbbuff;
     unsigned int *i_fbbuff;
-//    printf("%d bpp\n",bpp);
 
     switch(bpp)
     {
 	case 8:
-	    set332map(fh);
 	    *cpp = 1;
-	    c_fbbuff = (char *) malloc(count * sizeof(char));
+	    c_fbbuff = (unsigned char *) malloc(count * sizeof(unsigned char));
 	    for(i = 0; i < count; i++)
 		c_fbbuff[i] = make8color(rgbbuff[i*3], rgbbuff[i*3+1], rgbbuff[i*3+2]);
 	    fbbuff = (void *) c_fbbuff;

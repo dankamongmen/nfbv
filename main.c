@@ -8,7 +8,7 @@
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define SHOWDELAY 100000
-#define IDSTRING "fbv 0.9b, s-tech"
+#define IDSTRING "fbv 0.92b, s-tech"
 
 extern unsigned char * simple_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
 extern unsigned char * color_average_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
