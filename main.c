@@ -11,7 +11,6 @@
 #define SHOWDELAY 100000
 #define NEXT_IMG -3
 #define PREV_IMG -4
-#define IDSTRING "fbv "VERSION", s-tech"
 
 extern unsigned char * simple_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
 extern unsigned char * color_average_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
@@ -211,7 +210,7 @@ void help(char *name)
 	       " --colorstretch | -k : Strech (using color average resize) the image to fit onto screen if necessary\n"
                " --delay 	| -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
 	       "Use a,d,w and x to scroll the image\n\n"
-	       "%s/2000, http://s-tech.linux-pl.com\n",name,IDSTRING);
+	       "%s/2000-2001, http://s-tech.elsat.net.pl\n",name,IDSTRING);
 }
 
 extern int optind;

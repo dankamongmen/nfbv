@@ -1,0 +1,17 @@
+#!/bin/bash
+
+FBVNAME="fbv-`cat VERSION`"
+OLDDIR="`pwd`"
+
+make distclean
+
+cd ..
+mv fbv $FBVNAME
+
+tar -zcvf $FBVNAME.tar.gz $FBVNAME/
+
+mv $FBVNAME fbv
+
+cd $OLDDIR
+
+

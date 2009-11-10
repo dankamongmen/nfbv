@@ -1,3 +1,17 @@
+#include <linux/fb.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <asm/types.h>
+#include <string.h>
+#include <errno.h>
+#include "config.h"
+
 /*
  * FrameBuffer Image Display Function
  * (c) smoku/2000
@@ -14,8 +28,6 @@
  * extern void getCurrentRes(int *x,int *y);
  *
  */
-
-#include "fb_display.h"
 
 unsigned short red[256], green[256], blue[256];
 struct fb_cmap map332 = {0, 256, red, green, blue, NULL};
