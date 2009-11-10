@@ -1,0 +1,14 @@
+2001-02-19	Marcin Zieba    piaskowy@irc.pl
+	
+	* adding automake support.
+
+2001-02-18	Marcin Zieba	piaskowy@irc.pl
+	
+	* main.c: added long options support, fixed? segv. Checked, if user supplied filename.
+
+2000-11-23	Tomasz 'smoku' Sterna  <smoku@linux-pl.com>
+		Mateusz 'mteg' Golicz  <mtg@elsat.net.pl>
+	
+	* added this entry just to be fair, they did it all.
+	
+	

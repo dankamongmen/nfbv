@@ -5,12 +5,13 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <getopt.h>
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define SHOWDELAY 100000
 #define NEXT_IMG -3
 #define PREV_IMG -4
-#define IDSTRING "fbv 0.93b, s-tech"
+#define IDSTRING "fbv "VERSION", s-tech"
 
 extern unsigned char * simple_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
 extern unsigned char * color_average_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
@@ -202,13 +203,13 @@ void help(char *name)
 {
 	printf("Usage: %s [options] image1 image2 image3 ...\n\n"
 	       "The options are:\n"
-	       " -h : Show this help\n"
-	       " -c : Do not clear the screen before/after displaying image\n"
-	       " -u : Do not hide/show cursor before/after displaying image\n"
-	       " -i : Do not show image information\n"
-	       " -f : Strech (using simple resize) the image to fit onto screen if necessary\n"
-	       " -k : Strech (using color average resize) the image to fit onto screen if necessary\n"
-               " -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
+	       " --help 	| -h : Show this help\n"
+	       " --noclear 	| -c : Do not clear the screen before/after displaying image\n"
+	       " --unhide 	| -u : Do not hide/show cursor before/after displaying image\n"
+	       " --noinfo 	| -i : Do not show image information\n"
+	       " --stretch	| -f : Strech (using simple resize) the image to fit onto screen if necessary\n"
+	       " --colorstretch | -k : Strech (using color average resize) the image to fit onto screen if necessary\n"
+               " --delay 	| -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
 	       "Use a,d,w and x to scroll the image\n\n"
 	       "%s/2000, http://s-tech.linux-pl.com\n",name,IDSTRING);
 }
@@ -220,7 +221,20 @@ int main(int argc,char **argv)
 {
     int x,y,opt,a,r;
     unsigned char *buffer;
-    init_handlers();
+    
+    static struct option long_options[] =
+    {
+	{"help",	no_argument,	0, 'h'},
+        {"noclear", 	no_argument, 	0, 'c'},
+	{"unhide",  	no_argument, 	0, 'h'},
+	{"noinfo",  	no_argument, 	0, 'i'},
+	{"stretch", 	no_argument, 	0, 'f'},
+	{"colorstrech", no_argument, 	0, 'k'},
+	{"delay", 	required_argument, 0, 's'},
+	{0, 0, 0, 0}
+    };
+
+    init_handlers();																       
     
     if(argc<2)
 	help(argv[0]);
@@ -228,7 +242,7 @@ int main(int argc,char **argv)
     {
 	for(;;)
 	{
-	    opt=getopt_long(argc,argv,"chukfis:");
+	    opt=getopt_long_only(argc,argv,"chukfis:",long_options,NULL);
 	    if(opt==EOF) break;
 	    switch(opt)
 	    {
@@ -241,6 +255,7 @@ int main(int argc,char **argv)
 		case 'k': allowstrech=2; break;
 	    }
 	}
+	if(argv[optind]==NULL) {printf("You have to specify filename!\n"); return;}
 	while(imm_getchar(0,0)!=EOF);
 	if(hide) printf("\033[?25l");
 	for(a=optind;argv[a]!=NULL;a++) 
