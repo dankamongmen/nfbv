@@ -105,13 +105,13 @@ int fh_png_load(char *name,unsigned char *buffer, unsigned char ** alpha,int x,i
 		
 	    for (pass = 0; pass < number_passes; pass++)
     	{
-			fbptr = buffer;
+			fbptr = (char *)buffer;
 			aptr = alpha_buffer;
 			
 			for(i=0; i<height; i++)
     		{
 				int n;
-				unsigned char *trp = rp;
+				unsigned char *trp = (unsigned char *)rp;
 				
     	   		png_read_rows(png_ptr, rptr, NULL, 1);
 				
@@ -128,7 +128,7 @@ int fh_png_load(char *name,unsigned char *buffer, unsigned char ** alpha,int x,i
 	{
 	    for (pass = 0; pass < number_passes; pass++)
     	{
-			fbptr = buffer;
+			fbptr = (char *)buffer;
 			for(i=0; i<height; i++, fbptr += width*3)
     		{
 			    rptr[0] = (png_bytep) fbptr;
