@@ -7,6 +7,7 @@
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define SHOWDELAY 100000
+#define IDSTRING "fbv 0.6 , Written 2000 by Thomas 'smoku' Sterna and Matthew 'mteg' Golicz"
 
 int clear=1,delay=0,hide=1;
 
@@ -95,6 +96,7 @@ void show_image(char *name)
 	if(fh->get_pic(name,buffer,x,y)==FH_ERROR_OK)
 	{
 	    if(clear) { printf("\033[H\033[J"); fflush(stdout); usleep(SHOWDELAY); } /* temporary solution */
+	    printf("%s\n%s\n%d x %d\n",IDSTRING,name,x,y); 
 	    contoraw();
 	    getCurrentRes(&xs,&ys);
 	    xdelta=0; ydelta=0;
