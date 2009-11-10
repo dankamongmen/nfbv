@@ -40,12 +40,9 @@ int imm_getchar(int s,int us)
 
 void contoraw(void)
 {
-    ourtermios.c_iflag=0;
-    ourtermios.c_oflag=0;
-    ourtermios.c_cflag=0;
-    ourtermios.c_lflag=0;
-    cfmakeraw(&ourtermios);
     tcgetattr(0,&oldtermios);
+    memcpy(&ourtermios,&oldtermios,sizeof(struct termios));
+    ourtermios.c_lflag&=!(ECHO|ICANON);
     tcsetattr(0,TCSANOW,&ourtermios);
 }
 void connorm(void)

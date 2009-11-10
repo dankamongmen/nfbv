@@ -127,6 +127,8 @@ cat >>Makefile <<eof
 clean:
 	rm -f \$(OUT) *.o *~ *.bak *core
 	rm -f \$(OBJS)
+mrproper: clean
+	rm -f Makefile config.h
 install:
 	cp fbv /usr/bin
 uninstall:
