@@ -21,7 +21,6 @@ int fh_gif_id(char *name)
     fd=open(name,O_RDONLY); if(fd==-1) return(0);
     read(fd,id,4);
     close(fd);
-    printf(" id '%4s'\n",id);
     if(id[0]=='G' && id[1]=='I' && id[2]=='F') return(1);
     return(0);
 }

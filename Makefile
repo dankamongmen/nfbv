@@ -7,7 +7,7 @@ OUT = fbv
 LIBS = -ljpeg -lvga -lungif -lX11 -L/usr/X11R6/lib -lpng
 CFLAGS= --warn-all -I.
 
-$(OUT): $(OBJS)
+$(OUT): $(OBJS) fb_display.h
 	$(CC)  $(LDFLAGS) -o $(OUT) $(OBJS) $(LIBS)
 
 clean:

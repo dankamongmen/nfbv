@@ -12,4 +12,3 @@
 #include <errno.h>
 
 #define DEFAULT_FRAMEBUFFER     "/dev/fb0"
-

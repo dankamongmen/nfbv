@@ -1,0 +1,16 @@
+switching off cursor (it's flashing in upper-left corner)
+support for multiple files
+
+command-line switches:
+--no-clear
+--interpolate-resize
+--fast-resize
+--slideshow <timeout in ms>
+
+keymaps: (needed)
++	zoom in
+-	zoom out
+ *  	"feet to screen" zoom
+<space>	next picture
+<-	previous picture
+cursors	panning

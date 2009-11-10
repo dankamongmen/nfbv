@@ -1,6 +1,22 @@
+/*
+ * FrameBuffer Image Display Function
+ * (c) smoku/2000
+ *
+ */
+
+/* Public Use Functions:
+ *
+ * extern void fb_display(char *rgbbuff,
+ *     int x_size, int y_size,
+ *     int x_pan, int y_pan,
+ *     int x_offs, int y_offs);
+ *
+ * extern void getCurrentRes(int *x,int *y);
+ *
+ */
+
 #include "fb_display.h"
 
-char *fbdev = DEFAULT_FRAMEBUFFER;
 unsigned short red[256], green[256], blue[256];
 struct fb_cmap map332 = {0, 256, red, green, blue, NULL};
 
@@ -11,50 +27,64 @@ void getVarScreenInfo(int fh, struct fb_var_screeninfo *var);
 void setVarScreenInfo(int fh, struct fb_var_screeninfo *var);
 void getFixScreenInfo(int fh, struct fb_fix_screeninfo *fix);
 void set332map(int fh);
-unsigned char* convertRGB2FB(unsigned char *rgbbuff, unsigned long count);
-void blit2FB(int fh, unsigned char *fbbuff,
+void* convertRGB2FB(int fh, char *rgbbuff, unsigned long count, int bpp, int *cpp);
+void blit2FB(int fh, void *fbbuff,
 	unsigned int pic_xs, unsigned int pic_ys,
 	unsigned int scr_xs, unsigned int scr_ys,
-	unsigned int xp, unsigned int yp);
+	unsigned int xp, unsigned int yp,
+	unsigned int xoffs, unsigned int yoffs,
+	int cpp);
 
-void fb_display(char *rgbbuff, int x_size, int y_size, int x_pan, int y_pan)
+void fb_display(char *rgbbuff, int x_size, int y_size, int x_pan, int y_pan, int x_offs, int y_offs)
 {
     struct fb_var_screeninfo var;
-    unsigned char *fbbuff = NULL;
-    int fh = -1;
+    unsigned short *fbbuff = NULL;
+    int fh = -1, bp = 0;
     
-    /* first we get the framebuffer device handle */
-    fh = openFB(fbdev);
+    /* get the framebuffer device handle */
+    fh = openFB(NULL);
     
     /* read current video mode */
     getVarScreenInfo(fh, &var);
     
-    /* check if we have correct mode */
-    if(var.bits_per_pixel != 8){
-        fprintf(stderr, "Only 8bpp modes supported now. You've got: %d\n", var.bits_per_pixel);
-	exit(1);
-    }
-    
-    /* let's make a pseudo-truecolor map */
-    set332map(fh);
-    
     /* correct panning */
     if(x_pan > x_size - var.xres) x_pan = 0;
     if(y_pan > y_size - var.yres) y_pan = 0;
+    /* correct offset */
+    if(x_offs + x_size > var.xres) x_offs = 0;
+    if(y_offs + y_size > var.yres) y_offs = 0;
     
     /* blit buffer 2 fb */
-    fbbuff = convertRGB2FB(rgbbuff, x_size * y_size);
-    blit2FB(fh, fbbuff, x_size, y_size, var.xres, var.yres, x_pan, y_pan);
+    fbbuff = convertRGB2FB(fh, rgbbuff, x_size * y_size, var.bits_per_pixel, &bp);
+    blit2FB(fh, fbbuff, x_size, y_size, var.xres, var.yres, x_pan, y_pan, x_offs, y_offs, bp);
     free(fbbuff);
     
     /* close device */
     closeFB(fh);
 }
 
+void getCurrentRes(int *x, int *y)
+{
+    struct fb_var_screeninfo var;
+    int fh = -1;
+    fh = openFB(NULL);
+    getVarScreenInfo(fh, &var);
+    *x = var.xres;
+    *y = var.yres;
+    closeFB(fh);
+}
+
 int openFB(const char *name)
 {
     int fh;
-		
+    char *dev;
+
+    if(name == NULL){
+	dev = getenv("FRAMEBUFFER");
+	if(dev) name = dev;
+	else name = DEFAULT_FRAMEBUFFER;
+    }
+    
     if ((fh = open(name, O_WRONLY)) == -1){
         fprintf(stderr, "open %s: %s\n", name, strerror(errno));
 	exit(1);
@@ -91,28 +121,64 @@ void getFixScreenInfo(int fh, struct fb_fix_screeninfo *fix)
     }
 }
 
-void blit2FB(int fh, unsigned char *fbbuff,
+void blit2FB(int fh, void *fbbuff,
 	unsigned int pic_xs, unsigned int pic_ys,
 	unsigned int scr_xs, unsigned int scr_ys,
-	unsigned int xp, unsigned int yp)
+	unsigned int xp, unsigned int yp,
+	unsigned int xoffs, unsigned int yoffs,
+	int cpp)
 {
     int i, xc, yc;
+    char *cp; unsigned short *sp; unsigned int *ip;
+    cp = (char *) sp = (unsigned short *) ip = (unsigned int *) fbbuff;
 
     xc = (pic_xs > scr_xs) ? scr_xs : pic_xs;
     yc = (pic_ys > scr_ys) ? scr_ys : pic_ys;
     
-    for(i = 0; i < yc; i++){
-	lseek(fh, i*scr_xs, SEEK_SET);
-	write(fh, fbbuff + (i+yp)*pic_xs+xp, xc);
+    switch(cpp){
+	case 1:
+	    for(i = 0; i < yc; i++){
+		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
+		write(fh, cp + (i+yp)*pic_xs+xp, xc*cpp);
+	    }
+	    break;
+	case 2:
+	    for(i = 0; i < yc; i++){
+		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
+		write(fh, sp + (i+yp)*pic_xs+xp, xc*cpp);
+	    }
+	    break;
+	case 4:
+	    for(i = 0; i < yc; i++){
+		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
+		write(fh, ip + (i+yp)*pic_xs+xp, xc*cpp);
+	    }
+	    break;
     }
 }
 
-inline unsigned int make8color(register int r, register int g, register int b)
+inline char make8color(char r, char g, char b)
 {
-	return (
-	    ((r >> 5) & 7) << 5 |
-	    ((g >> 5) & 7) << 2 |
-	    ((b >> 6) & 3)      );
+    return (
+	(((r >> 5) & 7) << 5) |
+	(((g >> 5) & 7) << 2) |
+	 ((b >> 6) & 3)       );
+}
+
+inline unsigned short make15color(char r, char g, char b)
+{
+    return (
+	(((r >> 3) & 31) << 10) |
+	(((g >> 3) & 31) << 5)  |
+	 ((b >> 3) & 31)        );
+}
+
+inline unsigned short make16color(char r, char g, char b)
+{
+    return (
+	(((r >> 3) & 31) << 11) |
+	(((g >> 2) & 63) << 5)  |
+	 ((b >> 3) & 31)        );
 }
 
 void make332map(struct fb_cmap *map)
@@ -144,16 +210,54 @@ void set332map(int fh)
         exit(1);
     }
 }
-unsigned char* convertRGB2FB(unsigned char *rgbbuff, unsigned long count)
+
+void* convertRGB2FB(int fh, char *rgbbuff, unsigned long count, int bpp, int *cpp)
 {
     unsigned long i;
-    unsigned char *buffp, *rgbp, *fbbuff;
-    
-    fbbuff = buffp = (unsigned char *) malloc(count * sizeof(unsigned char));
-    rgbp = rgbbuff;
-    
-    for(i = 0; i < count; i++)
-	fbbuff[i] = make8color(rgbbuff[i*3], rgbbuff[i*3+1], rgbbuff[i*3+2]);
-	
+    void *fbbuff = NULL;
+    char *c_fbbuff;
+    unsigned short *s_fbbuff;
+    unsigned int *i_fbbuff;
+//    printf("%d bpp\n",bpp);
+
+    switch(bpp)
+    {
+	case 8:
+	    set332map(fh);
+	    *cpp = 1;
+	    c_fbbuff = (char *) malloc(count * sizeof(char));
+	    for(i = 0; i < count; i++)
+		c_fbbuff[i] = make8color(rgbbuff[i*3], rgbbuff[i*3+1], rgbbuff[i*3+2]);
+	    fbbuff = (void *) c_fbbuff;
+	    break;
+	case 15:
+	    *cpp = 2;
+	    s_fbbuff = (unsigned short *) malloc(count * sizeof(unsigned short));
+	    for(i = 0; i < count ; i++)
+		s_fbbuff[i] = make15color(rgbbuff[i*3], rgbbuff[i*3+1], rgbbuff[i*3+2]);
+	    fbbuff = (void *) s_fbbuff;
+	    break;
+	case 16:
+	    *cpp = 2;
+	    s_fbbuff = (unsigned short *) malloc(count * sizeof(unsigned short));
+	    for(i = 0; i < count ; i++)
+		s_fbbuff[i] = make16color(rgbbuff[i*3], rgbbuff[i*3+1], rgbbuff[i*3+2]);
+	    fbbuff = (void *) s_fbbuff;
+	    break;
+	case 24:
+	case 32:
+	    *cpp = 4;
+	    i_fbbuff = (unsigned int *) malloc(count * sizeof(unsigned int));
+	    for(i = 0; i < count ; i++)
+		i_fbbuff[i] = ((rgbbuff[i*3] << 16) & 0xFF0000) |
+			    ((rgbbuff[i*3+1] << 8) & 0xFF00) |
+			    (rgbbuff[i*3+2] & 0xFF);
+	    fbbuff = (void *) i_fbbuff;
+	    break;
+	default:
+	    fprintf(stderr, "Unsupported video mode! You've got: %dbpp\n", bpp);
+	    exit(1);
+    }
     return fbbuff;
 }
+
