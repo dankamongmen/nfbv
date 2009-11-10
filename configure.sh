@@ -110,8 +110,8 @@ fi
 
 cat > Makefile << eof
 
-SRCS = main.c jpeg.c gif.c png.c fb_display.c
-OBJS = main.o jpeg.o gif.o png.o fb_display.o
+SRCS = main.c jpeg.c gif.c png.c fb_display.c resize.c
+OBJS = main.o jpeg.o gif.o png.o fb_display.o resize.o
 
 OUT = fbv
 

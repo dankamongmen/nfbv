@@ -1,0 +1,19 @@
+
+  fbv - FrameBuffer Viewer
+
+This is a simple program to view pictures on a framebuffer console.
+
+We were just unable to find something doing the same thing in the Internet,
+"If You need something - write it Yourself".. ;->
+
+Instalation:
+Read INSTALL.
+
+Usage:
+Just type "fbv" and a help message will appear.
+
+
+Some code was based on fbset utility.
+Image decoding engine uses libungif, libjpeg, libpng.
+
+Big thanks for all You fb-contributors over there - great work!

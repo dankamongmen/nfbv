@@ -1,0 +1,7 @@
+Couldn't be more simple:
+- unarchive (You've probably already done it)
+- run: ./configure.sh
+- type: make
+- copy "fbv" to wherever You want (/usr/bin, /usr/local/bin etc.)
+
+Enjoy.

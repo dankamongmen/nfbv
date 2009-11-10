@@ -18,11 +18,12 @@ struct r_jpeg_error_mgr
 int fh_jpeg_id(char *name)
 {
     int fd;
-    char id[10];
+    unsigned char id[10];
     fd=open(name,O_RDONLY); if(fd==-1) return(0);
     read(fd,id,10);
     close(fd);
     if(id[6]=='J' && id[7]=='F' && id[8]=='I' && id[9]=='F') return(1);
+    if(id[0]==0xff && id[1]==0xd8 && id[2]==0xff) return(1);
     return(0);
 }
 			    

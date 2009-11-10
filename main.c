@@ -8,7 +8,11 @@
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define SHOWDELAY 100000
-#define IDSTRING "fbv 0.6 , Written 2000 by Thomas 'smoku' Sterna and Matthew 'mteg' Golicz"
+#define IDSTRING "fbv 0.9b, s-tech"
+
+extern unsigned char * simple_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
+extern unsigned char * color_average_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
+
 
 int clear=1,delay=0,hide=1,dispinfo=1,allowstrech=0;
 
@@ -201,6 +205,21 @@ int show_image(char *name)
     return(eol);
 }
 
+void help(char *name)
+{
+	printf("Usage: %s [options] image1 image2 image3 ...\n\n"
+	       "The options are:\n"
+	       " -h : Show this help\n"
+	       " -c : Do not clear the screen before/after displaying image\n"
+	       " -u : Do not hide/show cursor before/after displaying image\n"
+	       " -i : Do not show image information\n"
+	       " -f : Strech (using simple resize) the image to fit onto screen if necessary\n"
+	       " -k : Strech (using color average resize) the image to fit onto screen if necessary\n"
+               " -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
+	       "Use a,d,w and x to scroll the image\n\n"
+	       "%s/2000, http://s-tech.linux-pl.com\n",name,IDSTRING);
+}
+
 extern int optind;
 extern char *optarg;
 
@@ -211,26 +230,19 @@ int main(int argc,char **argv)
     init_handlers();
     
     if(argc<2)
-	printf("Usage: %s [options] image1 image2 image3 ...\n\n"
-	       "The options are:\n"
-	       " -c : Do not clear the screen before/after displaying image\n"
-	       " -h : Do not hide/show cursor before/after displaying image\n"
-	       " -i : Do not show image information\n"
-	       " -f : Strech (using simple resize) the image to fit onto screen if necessary\n"
-	       " -k : Strech (using color average resize) the image to fit onto screen if necessary\n"
-               " -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
-	       "Use a,d,w and x to scroll the image\n",argv[0]);
+	help(argv[0]);
     else
     {
 	for(;;)
 	{
-	    opt=getopt_long(argc,argv,"chkfis:");
+	    opt=getopt_long(argc,argv,"chukfis:");
 	    if(opt==EOF) break;
 	    switch(opt)
 	    {
 		case 'c': clear=0; break;
 		case 's': if(optarg) delay=atoi(optarg); break;
-		case 'h': hide=0; break;
+		case 'u': hide=0; break;
+		case 'h': help(argv[0]); break;
 		case 'i': dispinfo=0; break;
 		case 'f': allowstrech=1; break;
 		case 'k': allowstrech=2; break;
