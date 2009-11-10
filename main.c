@@ -8,7 +8,7 @@
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define SHOWDELAY 100000
 
-int clear=1,delay=0;
+int clear=1,delay=0,hide=1;
 
 struct formathandler *fh_root=NULL;
 
@@ -149,6 +149,7 @@ void show_image(char *name)
 			    break;
 			case ' ':
 			case 10:
+			case 'q':
 			    eol=1;
 		    }
 		}
@@ -179,18 +180,26 @@ int main(int argc,char **argv)
     init_handlers();
     
     if(argc<2)
-	printf("Usage: %s [options] image1 image2 image3 ...\n\nThe options are:\n -c : Do not clear the screen before/after displaying image\n-s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\nUse a,d,w and x to scroll the image\n",argv[0]);
+	printf("Usage: %s [options] image1 image2 image3 ...\n\n"
+	       "The options are:\n"
+	       " -c : Do not clear the screen before/after displaying image\n"
+	       " -h : Do not hide/show cursor before/after displaying image\n"
+	       " -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
+	       "Use a,d,w and x to scroll the image\n",argv[0]);
     else
     {
 	for(;;)
 	{
-	    opt=getopt_long(argc,argv,"cs:");
+	    opt=getopt_long(argc,argv,"chs:");
 	    if(opt==EOF) break;
 	    if(opt=='c') clear=0;
 	    if(opt=='s') if(optarg) delay=atoi(optarg);
+	    if(opt=='h') hide=0;
 	}
 	while(imm_getchar(0,0)!=EOF);
+	if(hide) printf("\033[?25l");
 	for(a=optind;argv[a]!=NULL;a++) show_image(argv[a]);
+	if(hide) printf("\033[?25h");
     }
     return;
 }
