@@ -1,3 +1,4 @@
+#include "config.h"
 #include "fbv.h"
 #include <stdio.h>
 #include <termios.h>
@@ -9,7 +10,7 @@
 #define SHOWDELAY 100000
 #define IDSTRING "fbv 0.6 , Written 2000 by Thomas 'smoku' Sterna and Matthew 'mteg' Golicz"
 
-int clear=1,delay=0,hide=1;
+int clear=1,delay=0,hide=1,dispinfo=1,allowstrech=0;
 
 struct formathandler *fh_root=NULL;
 
@@ -56,22 +57,33 @@ void add_format(int (*picsize)(char *,int *,int*),int (*picread)(char *,unsigned
     fhn->get_size=picsize; fhn->get_pic=picread; fhn->id_pic=id;
     fhn->next=fh_root; fh_root=fhn;
 }
+#ifdef FBV_SUPPORT_GIF
     extern int fh_gif_getsize(char *,int *,int*);
     extern int fh_gif_load(char *,unsigned char *,int,int);
+    extern int fh_gif_id(char *);
+#endif
+#ifdef FBV_SUPPORT_JPEG
     extern int fh_jpeg_getsize(char *,int *,int*);
     extern int fh_jpeg_load(char *,unsigned char *,int,int);
+    extern int fh_jpeg_id(char *);
+#endif
+#ifdef FBV_SUPPORT_PNG
     extern int fh_png_getsize(char *,int *,int*);
     extern int fh_png_load(char *,unsigned char *,int,int);
-
-    extern int fh_gif_id(char *);
-    extern int fh_jpeg_id(char *);
     extern int fh_png_id(char *);
+#endif
 
 void init_handlers(void)
 {
+#ifdef FBV_SUPPORT_GIF
     add_format(fh_gif_getsize,fh_gif_load,fh_gif_id);
+#endif
+#ifdef FBV_SUPPORT_JPEG
     add_format(fh_jpeg_getsize,fh_jpeg_load,fh_jpeg_id);
+#endif
+#ifdef FBV_SUPPORT_PNG
     add_format(fh_png_getsize,fh_png_load,fh_png_id);
+#endif
 }
 
 struct formathandler * fh_getsize(char *name,int *x,int *y)
@@ -85,36 +97,48 @@ struct formathandler * fh_getsize(char *name,int *x,int *y)
     return(NULL);
 }
 
-void show_image(char *name)
+int show_image(char *name)
 {
-    int x,y,xs,ys,xpos,ypos,xdelta,ydelta,c,eol,xstep,ystep,rfrsh;
+    int x,y,xs,ys,xpos,ypos,xdelta,ydelta,c,eol,xstep,ystep,rfrsh,imx,imy;
     unsigned char *buffer;
     struct formathandler *fh;
+    eol=1;
     if(fh=fh_getsize(name,&x,&y))
     {
 	buffer=(unsigned char *) malloc(x*y*3);
 	if(fh->get_pic(name,buffer,x,y)==FH_ERROR_OK)
 	{
 	    if(clear) { printf("\033[H\033[J"); fflush(stdout); usleep(SHOWDELAY); } /* temporary solution */
-	    printf("%s\n%s\n%d x %d\n",IDSTRING,name,x,y); 
+	    if(dispinfo) printf("%s\n%s\n%d x %d\n",IDSTRING,name,x,y); 
 	    contoraw();
 	    getCurrentRes(&xs,&ys);
-	    xdelta=0; ydelta=0;
-	    if(x<xs)
-		xpos=(xs-x)/2;
-	    else
-		xpos=0;
-
-	    if(y<ys)
-		ypos=(ys-y)/2;
-	    else
-		ypos=0;
+	    if((x>xs || y>ys) && allowstrech)
+	    {
+		if( (y*xs/x) <= ys)
+		{
+		    imx=xs;
+		    imy=y*xs/x;
+		}
+		else
+		{
+		    imx=x*ys/y;
+		    imy=ys;
+		}
+		if(allowstrech==1)
+		    buffer=simple_resize(buffer,x,y,imx,imy);
+		else
+		    buffer=color_average_resize(buffer,x,y,imx,imy);
+	        x=imx; y=imy;
+	    }
+	    
+	    if(x<xs) xpos=(xs-x)/2; else xpos=0;
+	    if(y<ys) ypos=(ys-y)/2; else ypos=0;
 	    xdelta=0; ydelta=0;
 
 	    xstep=min(max(x/20,1),xs);
 	    ystep=min(max(y/20,1),ys);
 
-	    for(eol=0,rfrsh=1;eol==0;)
+	    for(eol=-1,rfrsh=1;eol==-1;)
 	    {
 		if(rfrsh) fb_display(buffer,x,y,xdelta,ydelta,xpos,ypos);
 		rfrsh=0;
@@ -151,13 +175,16 @@ void show_image(char *name)
 			    break;
 			case ' ':
 			case 10:
-			case 'q':
 			    eol=1;
+			    break;
+			case 'q':
+			    eol=0;
+			    break;
 		    }
 		}
 		else
 		{
-		    imm_getchar(delay / 10,delay % 10);
+		    if(imm_getchar(delay / 10,delay % 10)=='q') eol=0; else eol=1;
 		    break;
 		}
 	    }
@@ -170,6 +197,8 @@ void show_image(char *name)
     }
     else
 	printf("Unable to read file or format not recognized!\n");
+	
+    return(eol);
 }
 
 extern int optind;
@@ -186,21 +215,30 @@ int main(int argc,char **argv)
 	       "The options are:\n"
 	       " -c : Do not clear the screen before/after displaying image\n"
 	       " -h : Do not hide/show cursor before/after displaying image\n"
-	       " -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
+	       " -i : Do not show image information\n"
+	       " -f : Strech (using simple resize) the image to fit onto screen if necessary\n"
+	       " -k : Strech (using color average resize) the image to fit onto screen if necessary\n"
+               " -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
 	       "Use a,d,w and x to scroll the image\n",argv[0]);
     else
     {
 	for(;;)
 	{
-	    opt=getopt_long(argc,argv,"chs:");
+	    opt=getopt_long(argc,argv,"chkfis:");
 	    if(opt==EOF) break;
-	    if(opt=='c') clear=0;
-	    if(opt=='s') if(optarg) delay=atoi(optarg);
-	    if(opt=='h') hide=0;
+	    switch(opt)
+	    {
+		case 'c': clear=0; break;
+		case 's': if(optarg) delay=atoi(optarg); break;
+		case 'h': hide=0; break;
+		case 'i': dispinfo=0; break;
+		case 'f': allowstrech=1; break;
+		case 'k': allowstrech=2; break;
+	    }
 	}
 	while(imm_getchar(0,0)!=EOF);
 	if(hide) printf("\033[?25l");
-	for(a=optind;argv[a]!=NULL;a++) show_image(argv[a]);
+	for(a=optind;argv[a]!=NULL;a++) if(!show_image(argv[a])) break;
 	if(hide) printf("\033[?25h");
     }
     return;

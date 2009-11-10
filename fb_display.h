@@ -10,5 +10,4 @@
 #include <asm/types.h>
 #include <string.h>
 #include <errno.h>
-
-#define DEFAULT_FRAMEBUFFER     "/dev/fb0"
+#include "config.h"

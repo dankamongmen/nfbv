@@ -1,3 +1,5 @@
+#include "config.h"
+#ifdef FBV_SUPPORT_JPEG
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -118,3 +120,4 @@ int fh_jpeg_getsize(char *filename,int *x,int *y)
     fclose(fh);
     return(FH_ERROR_OK);
 }
+#endif

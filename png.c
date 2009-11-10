@@ -1,3 +1,5 @@
+#include "config.h"
+#ifdef FBV_SUPPORT_PNG
 #include "png.h"
 #include "fbv.h"
 #include <sys/types.h>
@@ -121,3 +123,4 @@ int fh_png_getsize(char *name,int *x,int *y)
     fclose(fh);
     return(FH_ERROR_OK);
 }
+#endif

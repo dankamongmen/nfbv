@@ -1,17 +1,19 @@
-    #include "fbv.h"
-    #include <stdio.h>
-    #include <sys/types.h>
-    #include <sys/stat.h>
-    #include <fcntl.h>
-    #include <setjmp.h>
-    #include <gif_lib.h>
-    #include <signal.h>
-    #define min(a,b) ((a) < (b) ? (a) : (b))
-    #define gflush return(FH_ERROR_FILE);
-    #define grflush { DGifCloseFile(gft); return(FH_ERROR_FORMAT); }
-    #define mgrflush { free(lb); free(slb); DGifCloseFile(gft); return(FH_ERROR_FORMAT); }
-    #define agflush return(FH_ERROR_FORMAT);
-    #define agrflush { DGifCloseFile(gft); return(FH_ERROR_FORMAT); }
+#include "config.h"
+#ifdef FBV_SUPPORT_GIF
+#include "fbv.h"
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <setjmp.h>
+#include <gif_lib.h>
+#include <signal.h>
+#define min(a,b) ((a) < (b) ? (a) : (b))
+#define gflush return(FH_ERROR_FILE);
+#define grflush { DGifCloseFile(gft); return(FH_ERROR_FORMAT); }
+#define mgrflush { free(lb); free(slb); DGifCloseFile(gft); return(FH_ERROR_FORMAT); }
+#define agflush return(FH_ERROR_FORMAT);
+#define agrflush { DGifCloseFile(gft); return(FH_ERROR_FORMAT); }
 
 
 int fh_gif_id(char *name)
@@ -157,3 +159,4 @@ int fh_gif_getsize(char *name,int *x,int *y)
     DGifCloseFile(gft);
     return(FH_ERROR_FORMAT);
 }
+#endif
