@@ -8,7 +8,9 @@
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define SHOWDELAY 100000
-#define IDSTRING "fbv 0.92b, s-tech"
+#define NEXT_IMG -3
+#define PREV_IMG -4
+#define IDSTRING "fbv 0.93b, s-tech"
 
 extern unsigned char * simple_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
 extern unsigned char * color_average_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
@@ -148,39 +150,33 @@ int show_image(char *name)
 		    c=getchar();
 		    switch(c)
 		    {
-			case 'a':
-			case 'D':
+			case 'a': case 'D':
 		    	    xdelta-=xstep;
 			    if(xdelta<0) xdelta=0;
 			    rfrsh=1;
 			    break;
-			case 'd':
-			case 'C':
+			case 'd': case 'C':
 			    if(xpos) break;
 			    xdelta+=xstep;
 			    if(xdelta>(x-xs)) xdelta=x-xs;
 			    rfrsh=1;
 			    break;
-			case 'w':
-			case 'A':
+			case 'w': case 'A':
 			    ydelta-=ystep;
 			    if(ydelta<0) ydelta=0;
 			    rfrsh=1;
 			    break;
-			case 'x':
-			case 'B':
+			case 'x': case 'B':
 			    if(ypos) break;
 			    ydelta+=ystep;
 			    if(ydelta>(y-ys)) ydelta=y-ys;
 			    rfrsh=1;
 			    break;
-			case ' ':
-			case 10:
-			    eol=1;
-			    break;
-			case 'q':
-			    eol=0;
-			    break;
+			case ' ': case 10: eol=1; break;
+			case 'r': rfrsh=1; break;
+			case '.': case '>': eol=NEXT_IMG; break;
+			case ',': case '<': case 127: case 255: eol=PREV_IMG; break;
+			case 'q': eol=0; break;
 		    }
 		}
 		else
@@ -222,7 +218,7 @@ extern char *optarg;
 
 int main(int argc,char **argv)
 {
-    int x,y,opt,a;
+    int x,y,opt,a,r;
     unsigned char *buffer;
     init_handlers();
     
@@ -247,7 +243,16 @@ int main(int argc,char **argv)
 	}
 	while(imm_getchar(0,0)!=EOF);
 	if(hide) printf("\033[?25l");
-	for(a=optind;argv[a]!=NULL;a++) if(!show_image(argv[a])) break;
+	for(a=optind;argv[a]!=NULL;a++) 
+	{
+	    r=show_image(argv[a]);
+	    if(!r) break;
+	    if(r==PREV_IMG)
+		if((a-1)>=optind)
+		    a-=2;
+		else
+		    a-=1;
+	}
 	if(hide) printf("\033[?25h");
     }
     return;
