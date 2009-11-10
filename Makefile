@@ -3,7 +3,8 @@
 #
 # Makefile for fbv
 
-include Make.conf
+CONF=Make.conf
+-include $(CONF)
 
 CC	= gcc 
 CFLAGS  = -O2 -Wall -D_GNU_SOURCE
@@ -17,15 +18,17 @@ OUT	= fbv
 all: $(OUT)
 	@echo Build DONE.
 
-$(OUT): $(OBJECTS)
+$(OUT): $(OBJECTS) $(CONF)
 	$(CC) $(LDFLAGS) -o $(OUT) $(OBJECTS) $(LIBS)
+
+$(CONF):
+	$(error Please run ./configure first...)
 
 clean:
 	rm -f $(OBJECTS) *~ $$$$~* *.bak core config.log $(OUT)
 
 distclean: clean
-	@echo -e "error:\n\t@echo Please run ./configure first..." >Make.conf
-	rm -f $(OUT) config.h
+	rm -f $(OUT) $(CONF) config.h
 
 install: $(OUT)
 	cp $(OUT) $(DESTDIR)$(bindir)
