@@ -1,3 +1,21 @@
+/*
+    fbv  --  simple image viewer for the linux framebuffer
+    Copyright (C) 2000, 2001, 2003  Mateusz Golicz
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*/
 #include "config.h"
 #ifdef FBV_SUPPORT_GIF
 #include "fbv.h"
@@ -9,6 +27,8 @@
 #include <gif_lib.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define gflush return(FH_ERROR_FILE);
 #define grflush { DGifCloseFile(gft); return(FH_ERROR_FORMAT); }
@@ -44,21 +64,19 @@ inline void m_rend_gif_decodecolormap(unsigned char *cmb,unsigned char *rgbb,Col
 
 /* Thanks goes here to Mauro Meneghin, who implemented interlaced GIF files support */
 
-int fh_gif_load(char *name,unsigned char *buffer,int x,int y)
+int fh_gif_load(char *name,unsigned char *buffer, unsigned char ** alpha, int x,int y)
 {
   int in_nextrow[4]={8,8,4,2};   //interlaced jump to the row current+in_nextrow
   int in_beginrow[4]={0,4,2,1};  //begin pass j from that row number
   int transparency=-1;  //-1 means not transparency present
-  int tran_off;         //is the offset where the transparency byte be
-    int px,py,i,fby,fbx,fbl,ibxs;
-    int eheight,j;
+    int px,py,i,ibxs;
+    int j;
     char *fbptr;
     char *lb;
     char *slb;
     GifFileType *gft;
     GifByteType *extension;
     int extcode;
-    int spid;
     GifRecordType rt;
     ColorMapObject *cmap;
     int cmaps;
@@ -79,32 +97,52 @@ int fh_gif_load(char *name,unsigned char *buffer,int x,int y)
 //  printf("reading...\n");
 		if(lb!=NULL && slb!=NULL)
 		{
+			unsigned char *alphaptr = NULL;
+			
 		    cmap=(gft->Image.ColorMap ? gft->Image.ColorMap : gft->SColorMap);
 		    cmaps=cmap->ColorCount;
 
 		    ibxs=ibxs*3;
 		    fbptr=(char*)buffer;
+			
+			if(transparency != -1)
+			{
+				alphaptr = malloc(px * py);
+				*alpha = alphaptr;
+			}
+			
 		    if(!(gft->Image.Interlace))
 		    {
 			for(i=0;i<py;i++,fbptr+=px*3)
 			{
+				int j;
 			    if(DGifGetLine(gft,(GifPixelType*)slb,px)==GIF_ERROR) mgrflush;
 			    m_rend_gif_decodecolormap((unsigned char*)slb,(unsigned char*)lb,cmap,cmaps,px,transparency);
 			    memcpy(fbptr,lb,px*3);
+				if(alphaptr)
+					for(j = 0; j<px; j++) *(alphaptr++) = (((unsigned char*) slb)[j] == transparency) ? 0x00 : 0xff;
         		}
                     }
                     else
 		    {
+				unsigned char * aptr = NULL;
+				
 	               for(j=0;j<4;j++)
 	               {
-			    fbptr=(char*)buffer+in_beginrow[j];
+						int k;
+				        if(alphaptr)
+							aptr = alphaptr + (in_beginrow[j] * px);
+							
+					    fbptr=(char*)buffer + (in_beginrow[j] * px * 3);
 
-			    for(i=in_beginrow[j];i<py;i+=in_nextrow[j],fbptr+=px*3*in_beginrow[j])
+					    for(i = in_beginrow[j]; i<py; i += in_nextrow[j], fbptr += px * 3 * in_nextrow[j], aptr += px * in_nextrow[j])
 			    {
 				if(DGifGetLine(gft,(GifPixelType*)slb,px)==GIF_ERROR) mgrflush; /////////////
 				m_rend_gif_decodecolormap((unsigned char*)slb,(unsigned char*)lb,cmap,cmaps,px,transparency);
 				memcpy(fbptr,lb,px*3);
-            		    }
+				if(alphaptr)
+					for(k = 0; k<px; k++) aptr[k] = (((unsigned char*) slb)[k] == transparency) ? 0x00 : 0xff;
+          		    }
 			}
 		    }
 		}
@@ -115,8 +153,14 @@ int fh_gif_load(char *name,unsigned char *buffer,int x,int y)
 		if(DGifGetExtension(gft,&extcode,&extension)==GIF_ERROR) grflush; //////////
 		if(extcode==0xf9) //look image transparency in graph ctr extension
 		{
-		    tran_off=(int)*extension;
-		    transparency=(int)*(extension+tran_off);
+			if(extension[1] & 1)
+			{
+				transparency = extension[4];
+
+			}
+//		    tran_off=(int)*extension;
+//		    transparency=(int)*(extension+tran_off);
+//			printf("transparency: %d\n", transparency);
                 }
 		while(extension!=NULL)
 		    if(DGifGetExtensionNext(gft,&extension) == GIF_ERROR) grflush
@@ -134,18 +178,11 @@ int fh_gif_load(char *name,unsigned char *buffer,int x,int y)
 
 int fh_gif_getsize(char *name,int *x,int *y)
 {
-    int px,py,i,fby,fbx,fbl,ibxs;
-    int eheight,j;
-    char *fbptr;
-    char *lb;
-    char *slb;
+    int px,py;
     GifFileType *gft;
     GifByteType *extension;
     int extcode;
-    int spid;
     GifRecordType rt;
-    ColorMapObject *cmap;
-    int cmaps;
 
     gft=DGifOpenFileName(name);
     if(gft==NULL) gflush;

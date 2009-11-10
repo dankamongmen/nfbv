@@ -1,7 +1,0 @@
-Couldn't be more simple:
-- unarchive (You've probably already done it)
-- run: ./configure
-- type: make
-- type: make install
-
-Enjoy.

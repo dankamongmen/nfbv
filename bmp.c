@@ -1,3 +1,21 @@
+/*
+    fbv  --  simple image viewer for the linux framebuffer
+    Copyright (C) 2002  Tomasz Sterna
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*/
 #include "config.h"
 #ifdef FBV_SUPPORT_BMP
 #include "fbv.h"
@@ -53,7 +71,7 @@ void fetch_pallete(int fd, struct color pallete[], int count)
 	return;
 }
 
-int fh_bmp_load(char *name,unsigned char *buffer,int x,int y)
+int fh_bmp_load(char *name,unsigned char *buffer, unsigned char **alpha, int x,int y)
 {
 	int fd, bpp, raster, i, j, k, skip;
 	unsigned char buff[4];

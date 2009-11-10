@@ -1,8 +1,0 @@
-Some GIFs crash.
-(interlaced ones?) -> this was partially fixed by Gildo. I hope.
-
-Interlaced PNGs do not decode completely.
-(probably libpng bug)
-
-This'll be fixed in the future. (we hope)
-

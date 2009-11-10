@@ -1,3 +1,21 @@
+/*
+    fbv  --  simple image viewer for the linux framebuffer
+    Copyright (C) 2000, 2001, 2003  Mateusz Golicz
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*/
 #include "config.h"
 #ifdef FBV_SUPPORT_JPEG
 #include <stdio.h>
@@ -6,6 +24,8 @@
 #include <fcntl.h>
 #include <jpeglib.h>
 #include <setjmp.h>
+#include <unistd.h>
+#include <string.h>
 #include "fbv.h"
 
 struct r_jpeg_error_mgr
@@ -36,16 +56,15 @@ void jpeg_cb_error_exit(j_common_ptr cinfo)
     longjmp(mptr->envbuffer,1);
 }
 
-int fh_jpeg_load(char *filename,unsigned char *buffer,int x,int y)
+int fh_jpeg_load(char *filename,unsigned char *buffer, unsigned char ** alpha, int x,int y)
 {
     struct jpeg_decompress_struct cinfo;
     struct jpeg_decompress_struct *ciptr;
     struct r_jpeg_error_mgr emgr;
     unsigned char *bp;
-    int px,py,c,i;
+    int px,py,c;
     FILE *fh;
     JSAMPLE *lb;
-    struct rend_jpeg_mgr *rjpg;
 
     ciptr=&cinfo;
     if(!(fh=fopen(filename,"rb"))) return(FH_ERROR_FILE);
@@ -92,10 +111,9 @@ int fh_jpeg_getsize(char *filename,int *x,int *y)
     struct jpeg_decompress_struct cinfo;
     struct jpeg_decompress_struct *ciptr;
     struct r_jpeg_error_mgr emgr;
-    unsigned char *bp;
     int px,py,c;
     FILE *fh;
-    struct rend_jpeg_mgr *rjpg;
+
     ciptr=&cinfo;
     if(!(fh=fopen(filename,"rb"))) return(FH_ERROR_FILE);
     

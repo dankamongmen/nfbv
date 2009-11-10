@@ -1,3 +1,22 @@
+/*
+    fbv  --  simple image viewer for the linux framebuffer
+    Copyright (C) 2000, 2001, 2003  Mateusz Golicz
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*/
+
 #include "config.h"
 #include "fbv.h"
 #include <stdio.h>
@@ -6,6 +25,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <stdlib.h>
+#include <string.h>
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define SHOWDELAY 100000
@@ -13,10 +34,11 @@
 #define PREV_IMG -4
 
 extern unsigned char * simple_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
+extern unsigned char * alpha_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
 extern unsigned char * color_average_resize(unsigned char * orgin,int ox,int oy,int dx,int dy);
 
 
-int clear=1,delay=0,hide=1,dispinfo=1,allowstrech=0;
+int clear=1,delay=0,hide=1,dispinfo=1,allowstrech=0,opt_alpha = 0;
 
 struct formathandler *fh_root=NULL;
 
@@ -53,7 +75,7 @@ void connorm(void)
 }
 
 
-void add_format(int (*picsize)(char *,int *,int*),int (*picread)(char *,unsigned char *,int,int), int (*id)(char*))
+void add_format(int (*picsize)(char *,int *,int*),int (*picread)(char *,unsigned char *,unsigned char**,int,int), int (*id)(char*))
 {
     struct formathandler *fhn;
     fhn=(struct formathandler*) malloc(sizeof(struct formathandler));
@@ -62,22 +84,22 @@ void add_format(int (*picsize)(char *,int *,int*),int (*picread)(char *,unsigned
 }
 #ifdef FBV_SUPPORT_GIF
     extern int fh_gif_getsize(char *,int *,int*);
-    extern int fh_gif_load(char *,unsigned char *,int,int);
+    extern int fh_gif_load(char *,unsigned char *,unsigned char **, int,int);
     extern int fh_gif_id(char *);
 #endif
 #ifdef FBV_SUPPORT_JPEG
     extern int fh_jpeg_getsize(char *,int *,int*);
-    extern int fh_jpeg_load(char *,unsigned char *,int,int);
+    extern int fh_jpeg_load(char *,unsigned char *,unsigned char **, int,int);
     extern int fh_jpeg_id(char *);
 #endif
 #ifdef FBV_SUPPORT_PNG
     extern int fh_png_getsize(char *,int *,int*);
-    extern int fh_png_load(char *,unsigned char *,int,int);
+    extern int fh_png_load(char *,unsigned char *,unsigned char **,int,int);
     extern int fh_png_id(char *);
 #endif
 #ifdef FBV_SUPPORT_BMP
     extern int fh_bmp_getsize(char *,int *,int*);
-    extern int fh_bmp_load(char *,unsigned char *,int,int);
+    extern int fh_bmp_load(char *,unsigned char *,unsigned char **, int,int);
     extern int fh_bmp_id(char *);
 #endif
 
@@ -112,12 +134,13 @@ int show_image(char *name)
 {
     int x,y,xs,ys,xpos,ypos,xdelta,ydelta,c,eol,xstep,ystep,rfrsh,imx,imy;
     unsigned char *buffer;
+    unsigned char *alpha = NULL;
     struct formathandler *fh;
     eol=1;
-    if(fh=fh_getsize(name,&x,&y))
+    if((fh=fh_getsize(name,&x,&y)))
     {
 	buffer=(unsigned char *) malloc(x*y*3);
-	if(fh->get_pic(name,buffer,x,y)==FH_ERROR_OK)
+	if(fh->get_pic(name,buffer,&alpha,x,y)==FH_ERROR_OK)
 	{
 	    if(clear) { printf("\033[H\033[J"); fflush(stdout); usleep(SHOWDELAY); } /* temporary solution */
 	    if(dispinfo) printf("%s\n%s\n%d x %d\n",IDSTRING,name,x,y); 
@@ -139,6 +162,8 @@ int show_image(char *name)
 		    buffer=simple_resize(buffer,x,y,imx,imy);
 		else
 		    buffer=color_average_resize(buffer,x,y,imx,imy);
+		if(alpha)
+		    alpha=alpha_resize(alpha,x,y,imx,imy);
 	        x=imx; y=imy;
 	    }
 	    
@@ -151,7 +176,8 @@ int show_image(char *name)
 
 	    for(eol=-1,rfrsh=1;eol==-1;)
 	    {
-		if(rfrsh) fb_display(buffer,x,y,xdelta,ydelta,xpos,ypos);
+		if(rfrsh)
+			fb_display(buffer, opt_alpha ? alpha : NULL, x,y,xdelta,ydelta,xpos,ypos);
 		rfrsh=0;
 		if(!delay)
 		{
@@ -199,9 +225,10 @@ int show_image(char *name)
 	else
 	    printf("Unable to read file !\n");
 	free(buffer);
+	free(alpha);
     }
     else
-	printf("Unable to read file or format not recognized!\n");
+	printf("Unable to read file or file format not recognized!\n");
 	
     return(eol);
 }
@@ -209,16 +236,17 @@ int show_image(char *name)
 void help(char *name)
 {
 	printf("Usage: %s [options] image1 image2 image3 ...\n\n"
-	       "The options are:\n"
+	       "Available options:\n"
 	       " --help 	| -h : Show this help\n"
+	       " --alpha 	| -a : Use alpha channel (if applicable)\n"
 	       " --noclear 	| -c : Do not clear the screen before/after displaying image\n"
-	       " --unhide 	| -u : Do not hide/show cursor before/after displaying image\n"
-	       " --noinfo 	| -i : Do not show image information\n"
-	       " --stretch	| -f : Strech (using simple resize) the image to fit onto screen if necessary\n"
-	       " --colorstretch | -k : Strech (using color average resize) the image to fit onto screen if necessary\n"
-               " --delay 	| -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
+	       " --unhide 	| -u : Do not hide/show the cursor before/after displaying image\n"
+	       " --noinfo 	| -i : Supress image information\n"
+	       " --stretch	| -f : Strech (using a simple resizing routine) the image to fit onto screen if necessary\n"
+	       " --colorstretch | -k : Strech (using a 'color average' resizing routine) the image to fit onto screen if necessary\n"
+           " --delay 	| -s <delay> slideshow, wait 'delay' tenths of a second before displaying each image\n\n"
 	       "Use a,d,w and x to scroll the image\n\n"
-	       "%s/2000-2002, http://s-tech.elsat.net.pl\n",name,IDSTRING);
+	       "fbv 0.99 Copyright (C) 2000 - 2003 Mateusz Golicz, Tomasz Sterna.\n", name);
 }
 
 extern int optind;
@@ -226,13 +254,13 @@ extern char *optarg;
 
 int main(int argc,char **argv)
 {
-    int x,y,opt,a,r;
-    unsigned char *buffer;
+    int opt,a,r;
     
     static struct option long_options[] =
     {
 	{"help",	no_argument,	0, 'h'},
-        {"noclear", 	no_argument, 	0, 'c'},
+    {"noclear", 	no_argument, 	0, 'c'},
+    {"alpha", 	no_argument, 	0, 'a'},
 	{"unhide",  	no_argument, 	0, 'h'},
 	{"noinfo",  	no_argument, 	0, 'i'},
 	{"stretch", 	no_argument, 	0, 'f'},
@@ -249,10 +277,11 @@ int main(int argc,char **argv)
     {
 	for(;;)
 	{
-	    opt=getopt_long_only(argc,argv,"chukfis:",long_options,NULL);
+	    opt=getopt_long_only(argc,argv,"achukfis:",long_options,NULL);
 	    if(opt==EOF) break;
 	    switch(opt)
 	    {
+		case 'a': opt_alpha = 1; break;
 		case 'c': clear=0; break;
 		case 's': if(optarg) delay=atoi(optarg); break;
 		case 'u': hide=0; break;
@@ -262,7 +291,7 @@ int main(int argc,char **argv)
 		case 'k': allowstrech=2; break;
 	    }
 	}
-	if(argv[optind]==NULL) {printf("You have to specify filename!\n"); return;}
+	if(argv[optind]==NULL) {printf("You have to specify a filename!\n"); return(1);}
 	while(imm_getchar(0,0)!=EOF);
 	if(hide) printf("\033[?25l");
 	for(a=optind;argv[a]!=NULL;a++) 
@@ -270,12 +299,14 @@ int main(int argc,char **argv)
 	    r=show_image(argv[a]);
 	    if(!r) break;
 	    if(r==PREV_IMG)
-		if((a-1)>=optind)
-		    a-=2;
-		else
-		    a-=1;
+		{
+			if((a-1)>=optind)
+		    	a-=2;
+			else
+		    	a-=1;
+		}
 	}
 	if(hide) printf("\033[?25h");
     }
-    return;
+    return(0);
 }

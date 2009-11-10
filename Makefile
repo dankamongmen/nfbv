@@ -20,7 +20,7 @@ $(OUT): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $(OUT) $(OBJECTS) $(LIBS)
 
 clean:
-	rm -f $(OBJECTS) *~ $$$$~* *.bak core config.log
+	rm -f $(OBJECTS) *~ $$$$~* *.bak core config.log $(OUT)
 
 distclean: clean
 	@echo -e "error:\n\t@echo Please run ./configure first..." >Make.conf

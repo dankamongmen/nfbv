@@ -1,3 +1,23 @@
+/*
+    fbv  --  simple image viewer for the linux framebuffer
+    Copyright (C) 2000  Tomasz Sterna
+    Copyright (C) 2003  Mateusz Golicz
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*/
+
 #include <linux/fb.h>
 
 #include <stdio.h>
@@ -7,17 +27,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <asm/types.h>
 #include <string.h>
 #include <errno.h>
 #include "config.h"
-
-/*
- * FrameBuffer Image Display Function
- * (c) smoku/2000
- *
- */
-
 /* Public Use Functions:
  *
  * extern void fb_display(unsigned char *rgbbuff,
@@ -42,14 +56,14 @@ void setVarScreenInfo(int fh, struct fb_var_screeninfo *var);
 void getFixScreenInfo(int fh, struct fb_fix_screeninfo *fix);
 void set332map(int fh);
 void* convertRGB2FB(int fh, unsigned char *rgbbuff, unsigned long count, int bpp, int *cpp);
-void blit2FB(int fh, void *fbbuff,
+void blit2FB(int fh, void *fbbuff, unsigned char *alpha,
 	unsigned int pic_xs, unsigned int pic_ys,
 	unsigned int scr_xs, unsigned int scr_ys,
 	unsigned int xp, unsigned int yp,
 	unsigned int xoffs, unsigned int yoffs,
 	int cpp);
 
-void fb_display(unsigned char *rgbbuff, int x_size, int y_size, int x_pan, int y_pan, int x_offs, int y_offs)
+void fb_display(unsigned char *rgbbuff, unsigned char * alpha, int x_size, int y_size, int x_pan, int y_pan, int x_offs, int y_offs)
 {
     struct fb_var_screeninfo var;
     struct fb_fix_screeninfo fix;
@@ -65,8 +79,7 @@ void fb_display(unsigned char *rgbbuff, int x_size, int y_size, int x_pan, int y
     getFixScreenInfo(fh, &fix);
     
     x_stride = (fix.line_length * 8) / var.bits_per_pixel;
-    
-    
+   
     /* correct panning */
     if(x_pan > x_size - x_stride) x_pan = 0;
     if(y_pan > y_size - var.yres) y_pan = 0;
@@ -76,7 +89,7 @@ void fb_display(unsigned char *rgbbuff, int x_size, int y_size, int x_pan, int y
     
     /* blit buffer 2 fb */
     fbbuff = convertRGB2FB(fh, rgbbuff, x_size * y_size, var.bits_per_pixel, &bp);
-    blit2FB(fh, fbbuff, x_size, y_size, x_stride, var.yres, x_pan, y_pan, x_offs, y_offs, bp);
+    blit2FB(fh, fbbuff, alpha, x_size, y_size, x_stride, var.yres, x_pan, y_pan, x_offs, y_offs, bp);
     free(fbbuff);
     
     /* close device */
@@ -105,7 +118,7 @@ int openFB(const char *name)
 	else name = DEFAULT_FRAMEBUFFER;
     }
     
-    if ((fh = open(name, O_WRONLY)) == -1){
+    if ((fh = open(name, O_RDWR)) == -1){
         fprintf(stderr, "open %s: %s\n", name, strerror(errno));
 	exit(1);
     }
@@ -183,7 +196,7 @@ void set332map(int fh)
     set8map(fh, &map332);
 }
 
-void blit2FB(int fh, void *fbbuff,
+void blit2FB(int fh, void *fbbuff, unsigned char *alpha,
 	unsigned int pic_xs, unsigned int pic_ys,
 	unsigned int scr_xs, unsigned int scr_ys,
 	unsigned int xp, unsigned int yp,
@@ -191,38 +204,81 @@ void blit2FB(int fh, void *fbbuff,
 	int cpp)
 {
     int i, xc, yc;
-    unsigned char *cp; unsigned short *sp; unsigned int *ip;
-    cp = (unsigned char *) sp = (unsigned short *) ip = (unsigned int *) fbbuff;
-
+	unsigned char *fb;
+	
+	unsigned char *fbptr;
+	unsigned char *imptr;
+	
     xc = (pic_xs > scr_xs) ? scr_xs : pic_xs;
     yc = (pic_ys > scr_ys) ? scr_ys : pic_ys;
     
-    switch(cpp){
-	case 1:
+	fb = mmap(NULL, scr_xs * scr_ys * cpp, PROT_WRITE | PROT_READ, MAP_SHARED, fh, 0);
+	
+	if(fb == MAP_FAILED)
+	{
+		perror("mmap");
+		return;
+	}
+
+	if(cpp == 1)
+	{
 	    get8map(fh, &map_back);
 	    set332map(fh);
-	    for(i = 0; i < yc; i++){
-		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
-		write(fh, cp + (i+yp)*pic_xs+xp, xc*cpp);
-	    }
+	}
+
+	fbptr = fb     + (yoffs * scr_xs + xoffs) * cpp;
+	imptr = fbbuff + (yp	* pic_xs + xp) * cpp;
+	
+	if(alpha)
+	{
+	 	unsigned char * alphaptr;
+		int from, to, x;
+		
+		alphaptr = alpha + (yp	* pic_xs + xp);
+		
+		for(i = 0; i < yc; i++, fbptr += scr_xs * cpp, imptr += pic_xs * cpp, alphaptr += pic_xs)
+		{
+			for(x = 0; x<xc; x++)
+			{
+				int v;
+				
+				from = to = -1;
+				for(v = x; v<xc; v++)
+				{
+					if(from == -1)
+					{
+						if(alphaptr[v] > 0x80) from = v;
+					}
+					else
+					{
+						if(alphaptr[v] < 0x80)
+						{
+							to = v;
+							break;
+						}
+					}
+				}
+				if(from == -1)
+					break;
+					
+				if(to == -1) to = xc;
+				
+				memcpy(fbptr + (from * cpp), imptr + (from * cpp), (to - from - 1) * cpp);
+				x += to - from - 1;
+			}
+		}
+	}
+	else
+	    for(i = 0; i < yc; i++, fbptr += scr_xs * cpp, imptr += pic_xs * cpp)
+			memcpy(fbptr, imptr, xc * cpp);
+		
+	if(cpp == 1)
 	    set8map(fh, &map_back);
-	    break;
-	case 2:
-	    for(i = 0; i < yc; i++){
-		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
-		write(fh, sp + (i+yp)*pic_xs+xp, xc*cpp);
-	    }
-	    break;
-	case 4:
-	    for(i = 0; i < yc; i++){
-		lseek(fh, ((i+yoffs)*scr_xs+xoffs)*cpp, SEEK_SET);
-		write(fh, ip + (i+yp)*pic_xs+xp, xc*cpp);
-	    }
-	    break;
-    }
+	
+	munmap(fb, scr_xs * scr_ys * cpp);
 }
 
-inline unsigned char make8color(unsigned char r, unsigned char g, unsigned char b)
+inline static unsigned char make8color(unsigned char r, unsigned char g, unsigned char b)
 {
     return (
 	(((r >> 5) & 7) << 5) |
@@ -230,7 +286,7 @@ inline unsigned char make8color(unsigned char r, unsigned char g, unsigned char 
 	 ((b >> 6) & 3)       );
 }
 
-inline unsigned short make15color(unsigned char r, unsigned char g, unsigned char b)
+inline static unsigned short make15color(unsigned char r, unsigned char g, unsigned char b)
 {
     return (
 	(((r >> 3) & 31) << 10) |
@@ -238,7 +294,7 @@ inline unsigned short make15color(unsigned char r, unsigned char g, unsigned cha
 	 ((b >> 3) & 31)        );
 }
 
-inline unsigned short make16color(unsigned char r, unsigned char g, unsigned char b)
+inline static unsigned short make16color(unsigned char r, unsigned char g, unsigned char b)
 {
     return (
 	(((r >> 3) & 31) << 11) |
@@ -250,9 +306,9 @@ void* convertRGB2FB(int fh, unsigned char *rgbbuff, unsigned long count, int bpp
 {
     unsigned long i;
     void *fbbuff = NULL;
-    unsigned char *c_fbbuff;
-    unsigned short *s_fbbuff;
-    unsigned int *i_fbbuff;
+	u_int8_t  *c_fbbuff;
+    u_int16_t *s_fbbuff;
+    u_int32_t *i_fbbuff;
 
     switch(bpp)
     {
@@ -293,4 +349,3 @@ void* convertRGB2FB(int fh, unsigned char *rgbbuff, unsigned long count, int bpp
     }
     return fbbuff;
 }
-

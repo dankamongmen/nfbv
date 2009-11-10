@@ -1,3 +1,22 @@
+/*
+    fbv  --  simple image viewer for the linux framebuffer
+    Copyright (C) 2000, 2001, 2003  Mateusz Golicz
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+*/
+
 #include "config.h"
 #ifdef FBV_SUPPORT_PNG
 #include <png.h>
@@ -5,9 +24,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
 
-    #define PNG_BYTES_TO_CHECK 4
-    #define min(x,y) ((x) < (y) ? (x) : (y))
+#define PNG_BYTES_TO_CHECK 4
+#ifndef min
+#define min(x,y) ((x) < (y) ? (x) : (y))
+#endif
 
 int fh_png_id(char *name)
 {
@@ -21,15 +45,14 @@ int fh_png_id(char *name)
 }
 			    
 
-int fh_png_load(char *name,unsigned char *buffer,int x,int y)
+int fh_png_load(char *name,unsigned char *buffer, unsigned char ** alpha,int x,int y)
 {
     png_structp png_ptr;
     png_infop info_ptr;
     png_uint_32 width, height;
-    int fbx,fby,ibxs,fbl,i;
-    int eheight;
+    int i;
     int bit_depth, color_type, interlace_type;
-    int intent,number_passes,pass;
+    int number_passes,pass, trans = 0;
     char *rp;
     png_bytep rptr[2];
     char *fbptr;
@@ -60,23 +83,59 @@ int fh_png_load(char *name,unsigned char *buffer,int x,int y)
     if (color_type == PNG_COLOR_TYPE_PALETTE) png_set_expand(png_ptr); 
     if (bit_depth < 8) png_set_packing(png_ptr);
     if (color_type == PNG_COLOR_TYPE_GRAY || color_type== PNG_COLOR_TYPE_GRAY_ALPHA) png_set_gray_to_rgb(png_ptr);
-    if( bit_depth==16) png_set_strip_16(png_ptr); 
+	if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS))
+	{
+		trans = 1;
+		png_set_tRNS_to_alpha(png_ptr);
+	}
+
+    if(bit_depth == 16) png_set_strip_16(png_ptr); 
     number_passes = png_set_interlace_handling(png_ptr);
     png_read_update_info(png_ptr,info_ptr);
+
+	if (color_type == PNG_COLOR_TYPE_GRAY_ALPHA || color_type == PNG_COLOR_TYPE_RGB_ALPHA || trans)
+	{
+		unsigned char * alpha_buffer = (unsigned char*) malloc(width * height);
+		unsigned char * aptr;
+		
+    	rp = (char*) malloc(width * 4);
+	    rptr[0] = (png_bytep) rp;
     
-    rp=(char*) malloc(width*3);
-    rptr[0]=(png_bytep) rp;
-    
-    for (pass = 0; pass < number_passes; pass++)
-    {
-	fbptr=buffer;
-	for(i=0;i<height;i++,fbptr+=width*3)
+		*alpha = alpha_buffer;
+		
+	    for (pass = 0; pass < number_passes; pass++)
     	{
-    	    png_read_rows(png_ptr, rptr, NULL, 1);
-	    memcpy(fbptr,rp,width*3);
+			fbptr = buffer;
+			aptr = alpha_buffer;
+			
+			for(i=0; i<height; i++)
+    		{
+				int n;
+				unsigned char *trp = rp;
+				
+    	   		png_read_rows(png_ptr, rptr, NULL, 1);
+				
+				for(n = 0; n < width; n++, fbptr += 3, trp += 4)
+				{
+					memcpy(fbptr, trp, 3);
+					*(aptr++) = trp[3];
+				}
+			}
+    	}
+	    free(rp);
 	}
-    }
-    free(rp);
+	else
+	{
+	    for (pass = 0; pass < number_passes; pass++)
+    	{
+			fbptr = buffer;
+			for(i=0; i<height; i++, fbptr += width*3)
+    		{
+			    rptr[0] = (png_bytep) fbptr;
+    	   		png_read_rows(png_ptr, rptr, NULL, 1);
+			}
+    	}
+	}
     png_read_end(png_ptr, info_ptr);
     png_destroy_read_struct(&png_ptr, &info_ptr, (png_infopp)NULL);
     fclose(fh);
@@ -87,13 +146,8 @@ int fh_png_getsize(char *name,int *x,int *y)
     png_structp png_ptr;
     png_infop info_ptr;
     png_uint_32 width, height;
-    int fbx,fby,ibxs,fbl,i;
-    int eheight;
     int bit_depth, color_type, interlace_type;
-    int intent,number_passes,pass;
     char *rp;
-    png_bytep rptr[2];
-    char *fbptr;
     FILE *fh;
 
     if(!(fh=fopen(name,"rb"))) return(FH_ERROR_FILE);

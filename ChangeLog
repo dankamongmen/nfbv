@@ -1,3 +1,8 @@
+0.99    2003-08-24      Mateusz Golicz mtg@elsat.net.pl
+      * fixes in transparent and interlaced GIF & PNG support
+      * support for using the alpha channel
+	  * docs update
+
 0.98    2002-12-05      Nat Ersoz       nat.ersoz@myrio.com
         * fbv now supports the "stride" feature (it works (hopefully)
 	  well when a device supports a line length longer than
