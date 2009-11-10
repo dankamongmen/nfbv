@@ -18,8 +18,6 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
-#include <linux/fb.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -32,6 +30,8 @@
 #include <string.h>
 #include <errno.h>
 #include "config.h"
+#include <linux/fb.h>
+
 /* Public Use Functions:
  *
  * extern void fb_display(unsigned char *rgbbuff,
