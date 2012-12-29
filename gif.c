@@ -70,7 +70,7 @@ int fh_gif_load(char *name,unsigned char *buffer, unsigned char ** alpha, int x,
   int in_beginrow[4]={0,4,2,1};  //begin pass j from that row number
   int transparency=-1;  //-1 means not transparency present
     int px,py,i,ibxs;
-    int j;
+    int j,err;
     char *fbptr;
     char *lb;
     char *slb;
@@ -81,7 +81,7 @@ int fh_gif_load(char *name,unsigned char *buffer, unsigned char ** alpha, int x,
     ColorMapObject *cmap;
     int cmaps;
 
-    gft=DGifOpenFileName(name);
+    gft=DGifOpenFileName(name,&err);
     if(gft==NULL){printf("err5\n"); gflush;} //////////
     do
     {
@@ -181,10 +181,10 @@ int fh_gif_getsize(char *name,int *x,int *y)
     int px,py;
     GifFileType *gft;
     GifByteType *extension;
-    int extcode;
+    int extcode,err;
     GifRecordType rt;
 
-    gft=DGifOpenFileName(name);
+    gft=DGifOpenFileName(name,&err);
     if(gft==NULL) gflush;
     do
     {
